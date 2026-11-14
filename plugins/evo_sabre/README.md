@@ -37,6 +37,7 @@ Installing over version 2 of the plugin replaces it and starts the new display a
 | Brightness | 1 to 255. |
 | Level meters | Two meters beside the track, one a channel. Off unless you switch them on. |
 | Meters: where they stand | Lying under the track, or upright at its left or its right. |
+| Meters: gain (dB) | Decibels added to what the meters show, -12 to 12. What is played is not touched. |
 | Clock after | Seconds of rest before the clock replaces the track. 0 keeps the track. |
 | Clock digits: unlit segments | The segments of the clock's digits that are not lit: Dark, Very faint, Faint or Dim. The first two greys are fainter than any other on the display. |
 | Dim after | Seconds after the last key on the remote, or after playback started, before the display dims. 0 never dims. |
@@ -53,6 +54,8 @@ Settings take effect when saved.
 Switch *Level meters* on and two meters stand beside the track, one a channel, on a scale of sixty decibels. The bright part of a meter is the level, averaged as a VU meter averages; the dimmer part reaches to the peak; a mark holds the highest peak for a moment before it falls. The marks between the two meters stand at 50, 40, 30, 20, 10, 6 and 3 decibels under full scale, and at full scale.
 
 *Meters: where they stand* places them. Lying under the track, the left channel is above the right and the scale runs from left to right; the artist and the album share the line under the title to make room. Upright at the left or the right of the track, the left channel comes first and the scale runs from the bottom up; the track keeps its three lines, each a little shorter.
+
+*Meters: gain* adds up to twelve decibels to what the meters show, or takes as many away: up for music that leaves them low, down for music that keeps them at the top. It moves the meters only.
 
 The meters read evotap, a tap in the player's audio path. Every stream passes through it unchanged, PCM, DoP and native DSD alike, and it measures the stream ahead of the player's volume, so the meters show the music and not the volume it is played at. After the plugin is installed or updated the tap joins the audio path once the player has restarted; the plugin asks when that is needed. With the meters off, the tap is not in the path.
 

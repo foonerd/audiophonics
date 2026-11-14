@@ -23,6 +23,10 @@
         "type": "string",
         "value": "horizontal"
     },
+    "meters_gain": {
+        "type": "number",
+        "value": 0
+    },
     "clock_after": {
         "type": "number",
         "value": 6

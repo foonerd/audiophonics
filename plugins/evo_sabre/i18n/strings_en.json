@@ -19,6 +19,8 @@
         "METERS_HORIZONTAL": "Under the track, lying",
         "METERS_VERTICAL_LEFT": "At the left, upright",
         "METERS_VERTICAL_RIGHT": "At the right, upright",
+        "METERS_GAIN": "Meters: gain (dB)",
+        "METERS_GAIN_DOC": "Decibels added to what the meters show, from -12 to 12. Raise it for music that leaves the meters low, lower it for music that keeps them at the top. It moves the meters only: what is played is not touched.",
         "CLOCK_AFTER": "Clock after (seconds)",
         "CLOCK_AFTER_DOC": "How long the player rests, paused or stopped, before the clock takes the place of the track. 0 keeps the track.",
         "CLOCK_SEGMENTS": "Clock digits: unlit segments",

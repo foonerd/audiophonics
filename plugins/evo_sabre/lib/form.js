@@ -6,6 +6,7 @@
 // The whole numbers the page takes, each with the range the display accepts.
 const NUMBERS = {
     contrast: [1, 255],
+    meters_gain: [-12, 12],
     clock_after: [0, 86400],
     sleep_after: [0, 86400],
     deep_sleep_after: [0, 86400]

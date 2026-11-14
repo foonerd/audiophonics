@@ -21,6 +21,7 @@
                     "contrast",
                     "meters",
                     "meters_style",
+                    "meters_gain",
                     "clock_after",
                     "clock_segments",
                     "sleep_after",
@@ -86,6 +87,29 @@
                         {
                             "value": "vertical_right",
                             "label": "TRANSLATE.EVOSABRE.METERS_VERTICAL_RIGHT"
+                        }
+                    ]
+                },
+                {
+                    "id": "meters_gain",
+                    "element": "input",
+                    "type": "number",
+                    "label": "TRANSLATE.EVOSABRE.METERS_GAIN",
+                    "doc": "TRANSLATE.EVOSABRE.METERS_GAIN_DOC",
+                    "value": 0,
+                    "visibleIf": {
+                        "field": "meters",
+                        "value": true
+                    },
+                    "attributes": [
+                        {
+                            "min": -12
+                        },
+                        {
+                            "max": 12
+                        },
+                        {
+                            "step": 1
                         }
                     ]
                 },

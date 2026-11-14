@@ -19,6 +19,8 @@
         "METERS_HORIZONTAL": "Sous le morceau, couchés",
         "METERS_VERTICAL_LEFT": "À gauche, debout",
         "METERS_VERTICAL_RIGHT": "À droite, debout",
+        "METERS_GAIN": "Indicateurs : gain (dB)",
+        "METERS_GAIN_DOC": "Décibels ajoutés à ce que montrent les indicateurs, de -12 à 12. Augmentez-le pour une musique qui les laisse bas, diminuez-le pour une musique qui les tient en haut. Il ne déplace que les indicateurs : ce qui est lu n'est pas modifié.",
         "CLOCK_AFTER": "Horloge après (secondes)",
         "CLOCK_AFTER_DOC": "Durée de repos du lecteur, en pause ou à l'arrêt, avant que l'horloge ne remplace le morceau. 0 garde le morceau.",
         "CLOCK_SEGMENTS": "Chiffres de l'horloge : segments éteints",

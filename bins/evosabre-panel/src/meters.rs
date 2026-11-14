@@ -221,6 +221,21 @@ mod tests {
     }
 
     #[test]
+    fn a_level_raised_past_full_scale_stands_at_full_scale() {
+        let mut m = Meters::default();
+        let mut t = Instant::now();
+        let loud = level(0.9, 0.7).gained(12.0);
+        for _ in 0..80 {
+            m.feed(Some(loud), t);
+            t += Duration::from_millis(25);
+        }
+        let bar = m.bars()[0];
+        assert_eq!(bar.peak, 1.0);
+        assert_eq!(bar.hold, 1.0);
+        assert!(bar.level > 0.99 && bar.level <= 1.0, "{bar:?}");
+    }
+
+    #[test]
     fn a_stream_standing_still_lets_every_mark_fall_to_rest() {
         let mut m = Meters::default();
         let mut t = Instant::now();

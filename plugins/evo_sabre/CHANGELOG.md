@@ -2,6 +2,10 @@
 
 All notable changes to the Audiophonics Evo Sabre plugin are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.99.7] - 2026-11-14
+
+- **Meters: gain**, from -12 to 12 dB, added to what the level meters show. It moves the meters only; what is played is not touched.
+
 ## [2.99.6] - 2026-11-14
 
 - **Level meters**, a switch, off until you switch it on: two meters beside the track, one a channel, on a scale of sixty decibels. Each shows the level, the reach of the peak, and a mark that holds the highest peak for a moment. They move twenty-five times a second.

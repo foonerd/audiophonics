@@ -606,7 +606,8 @@ fn run(path: &str) -> Result<(), String> {
                 }
                 None if cfg.meters.is_some() => {
                     let place = cfg.meters.unwrap_or(layout::Place::Under);
-                    needles.feed(source.take(now), now);
+                    let gain = f32::from(cfg.meters_gain);
+                    needles.feed(source.take(now).map(|level| level.gained(gain)), now);
                     match source.changed() {
                         Some(true) => info!(
                             "meters: reading {}",

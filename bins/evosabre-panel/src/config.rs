@@ -106,6 +106,8 @@ pub struct Config {
     pub clock_segments: Unlit,
     /// The level meters: off, or where they stand beside the track.
     pub meters: Option<Place>,
+    /// Decibels added to what the meters show, -12 to 12.
+    pub meters_gain: i8,
 
     /// Whether the handset's transport keys are obeyed.
     pub remote: bool,
@@ -141,6 +143,7 @@ impl Default for Config {
             clock_after: Duration::from_secs(6),
             clock_segments: Unlit::VeryFaint,
             meters: None,
+            meters_gain: 0,
 
             remote: true,
             log_level: Level::Error,
@@ -204,6 +207,9 @@ pub fn from_store(store: &Store) -> (Config, Vec<String>) {
     }
     if let Some(v) = number("clock_after", 0, DAY) {
         c.clock_after = Duration::from_secs(v as u64);
+    }
+    if let Some(v) = number("meters_gain", -12, 12) {
+        c.meters_gain = v as i8;
     }
     if let Some(v) = number("poll_interval_ms", 100, 10_000) {
         c.poll_interval = Duration::from_millis(v as u64);
@@ -298,6 +304,7 @@ mod tests {
         assert_eq!(c.clock_after, Duration::from_secs(6));
         assert_eq!(c.clock_segments, Unlit::VeryFaint);
         assert_eq!(c.meters, None);
+        assert_eq!(c.meters_gain, 0);
         assert!(c.remote);
         assert_eq!(c.log_level, Level::Error);
         assert!(c
@@ -321,6 +328,7 @@ mod tests {
             "clock_segments": { "type": "string", "value": "off" },
             "meters": { "type": "boolean", "value": true },
             "meters_style": { "type": "string", "value": "vertical_right" },
+            "meters_gain": { "type": "number", "value": -6 },
             "log_level": { "type": "string", "value": "info" }
         }"#,
         )
@@ -334,6 +342,7 @@ mod tests {
         assert_eq!(c.clock_after, Duration::from_secs(30));
         assert_eq!(c.clock_segments, Unlit::Off);
         assert_eq!(c.meters, Some(Place::Right));
+        assert_eq!(c.meters_gain, -6);
         assert_eq!(c.log_level, Level::Info);
         assert_eq!(c.dc_gpio, 27, "a key that is absent leaves its default");
     }
@@ -418,5 +427,10 @@ mod tests {
             "a place not known leaves the first"
         );
         assert!(problems.iter().any(|p| p.starts_with("meters_style:")));
+
+        let loud = Store::parse(r#"{ "meters_gain": { "type": "number", "value": 20 } }"#).unwrap();
+        let (c, problems) = from_store(&loud);
+        assert_eq!(c.meters_gain, 0, "a gain out of range leaves none");
+        assert!(problems.iter().any(|p| p.starts_with("meters_gain:")));
     }
 }

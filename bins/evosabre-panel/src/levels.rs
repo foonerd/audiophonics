@@ -23,6 +23,18 @@ pub struct Level {
     pub rms: [f32; 2],
 }
 
+impl Level {
+    /// The same levels so many decibels up or down: the meters' gain. It
+    /// moves what is shown, not what is played.
+    pub fn gained(self, db: f32) -> Self {
+        let by = 10f32.powf(db / 20.0);
+        Self {
+            peak: self.peak.map(|v| v * by),
+            rms: self.rms.map(|v| v * by),
+        }
+    }
+}
+
 pub struct Source {
     dir: PathBuf,
     prefix: String,
@@ -177,6 +189,21 @@ mod tests {
         assert_eq!(source.changed(), Some(true));
         assert_eq!(source.changed(), None, "said once");
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn gain_moves_every_level_by_its_decibels() {
+        let level = Level {
+            peak: [0.5, 0.25],
+            rms: [0.1, 0.0],
+        };
+        let up = level.gained(6.0);
+        assert!((up.peak[0] - 0.9976).abs() < 0.001, "{up:?}");
+        assert!((up.peak[1] - 0.4988).abs() < 0.001, "{up:?}");
+        assert_eq!(up.rms[1], 0.0, "silence stays silence");
+        let down = level.gained(-12.0);
+        assert!((down.peak[0] - 0.1256).abs() < 0.001, "{down:?}");
+        assert_eq!(level.gained(0.0), level);
     }
 
     #[test]
