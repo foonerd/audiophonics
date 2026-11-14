@@ -1,0 +1,25 @@
+[package]
+name = "evosabre-panel"
+version = "3.0.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+description = "The EVO Sabre's second display and its remote: an SSD1322 OLED drawn from Volumio's state, and the handset's transport keys"
+
+[dependencies]
+audiophonics-base = { path = "../../crates/base" }
+audiophonics-player = { path = "../../crates/player" }
+audiophonics-remote = { path = "../../crates/remote" }
+# The panel. embedded-graphics is the drawing model (a DrawTarget over the
+# 4-bit frame, its fonts and primitives); spidev and gpio-cdev are the two
+# kernel interfaces the SSD1322 is wired to. The controller needs forty
+# lines of commands, which are in src/ssd1322.rs where they can be read.
+embedded-graphics = "0.8"
+spidev = "0.7"
+gpio-cdev = "0.6"
+signal-hook = { version = "0.3", default-features = false }
+serde_json.workspace = true
+
+[lints]
+workspace = true

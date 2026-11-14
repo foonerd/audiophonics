@@ -1,0 +1,18 @@
+[package]
+name = "audiophonics-player"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+description = "The player a display follows and a remote commands: Volumio, over its REST interface on loopback"
+
+# No HTTP client crate. `ureq` and `reqwest` both pull `url` into `idna` into
+# the `icu_*` normalisation stack, a Unicode library carried solely to parse
+# "http://127.0.0.1:3000". src/http.rs is a small GET and POST instead.
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

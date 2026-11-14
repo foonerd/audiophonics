@@ -1,0 +1,30 @@
+{
+    "oled_active": {
+        "type": "boolean",
+        "value": true
+    },
+    "remote_active": {
+        "type": "boolean",
+        "value": true
+    },
+    "contrast": {
+        "type": "number",
+        "value": 100
+    },
+    "clock_after": {
+        "type": "number",
+        "value": 6
+    },
+    "sleep_after": {
+        "type": "number",
+        "value": 1200
+    },
+    "deep_sleep_after": {
+        "type": "number",
+        "value": 3600
+    },
+    "log_level": {
+        "type": "string",
+        "value": "error"
+    }
+}

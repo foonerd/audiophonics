@@ -1,0 +1,3 @@
+# audiophonics_evo_sabre plugin: the infrared receiver on a GPIO decodes the
+# NEC frames the EVO Sabre's handset sends, beside whatever it decoded before.
+ACTION=="add|change", SUBSYSTEM=="rc", ENV{DRV_NAME}=="gpio_ir_recv", ATTR{protocols}="+nec"

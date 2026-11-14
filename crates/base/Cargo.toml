@@ -1,0 +1,18 @@
+[package]
+name = "audiophonics-base"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+description = "What every Audiophonics daemon needs whatever its display: the journal, the plugin's settings store, the address, local time and the idle policy"
+
+[dependencies]
+serde_json.workspace = true
+# Interface addresses, for the address a display shows.
+if-addrs = "0.13"
+# The unit's own zone file, read without a C library behind it.
+tz-rs = "0.6"
+
+[lints]
+workspace = true

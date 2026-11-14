@@ -1,0 +1,205 @@
+{
+    "page": {
+        "label": "TRANSLATE.EVOSABRE.PLUGIN_CONFIGURATION"
+    },
+    "sections": [
+        {
+            "id": "section_display",
+            "element": "section",
+            "label": "TRANSLATE.EVOSABRE.SECTION_DISPLAY",
+            "icon": "fa-television",
+            "description": "TRANSLATE.EVOSABRE.SECTION_DISPLAY_DOC",
+            "onSave": {
+                "type": "controller",
+                "endpoint": "system_hardware/audiophonics_evo_sabre",
+                "method": "saveDisplay"
+            },
+            "saveButton": {
+                "label": "TRANSLATE.EVOSABRE.SAVE",
+                "data": [
+                    "oled_active",
+                    "contrast",
+                    "clock_after",
+                    "sleep_after",
+                    "deep_sleep_after"
+                ]
+            },
+            "content": [
+                {
+                    "id": "oled_active",
+                    "element": "switch",
+                    "label": "TRANSLATE.EVOSABRE.OLED_ACTIVE",
+                    "doc": "TRANSLATE.EVOSABRE.OLED_ACTIVE_DOC",
+                    "value": true
+                },
+                {
+                    "id": "contrast",
+                    "element": "input",
+                    "type": "number",
+                    "label": "TRANSLATE.EVOSABRE.CONTRAST",
+                    "doc": "TRANSLATE.EVOSABRE.CONTRAST_DOC",
+                    "value": 100,
+                    "attributes": [
+                        {
+                            "min": 1
+                        },
+                        {
+                            "max": 255
+                        },
+                        {
+                            "step": 1
+                        }
+                    ]
+                },
+                {
+                    "id": "clock_after",
+                    "element": "input",
+                    "type": "number",
+                    "label": "TRANSLATE.EVOSABRE.CLOCK_AFTER",
+                    "doc": "TRANSLATE.EVOSABRE.CLOCK_AFTER_DOC",
+                    "value": 6,
+                    "attributes": [
+                        {
+                            "min": 0
+                        },
+                        {
+                            "max": 86400
+                        },
+                        {
+                            "step": 1
+                        }
+                    ]
+                },
+                {
+                    "id": "sleep_after",
+                    "element": "input",
+                    "type": "number",
+                    "label": "TRANSLATE.EVOSABRE.SLEEP_AFTER",
+                    "doc": "TRANSLATE.EVOSABRE.SLEEP_AFTER_DOC",
+                    "value": 1200,
+                    "attributes": [
+                        {
+                            "min": 0
+                        },
+                        {
+                            "max": 86400
+                        },
+                        {
+                            "step": 1
+                        }
+                    ]
+                },
+                {
+                    "id": "deep_sleep_after",
+                    "element": "input",
+                    "type": "number",
+                    "label": "TRANSLATE.EVOSABRE.DEEP_SLEEP_AFTER",
+                    "doc": "TRANSLATE.EVOSABRE.DEEP_SLEEP_AFTER_DOC",
+                    "value": 3600,
+                    "attributes": [
+                        {
+                            "min": 0
+                        },
+                        {
+                            "max": 86400
+                        },
+                        {
+                            "step": 1
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "id": "section_remote",
+            "element": "section",
+            "label": "TRANSLATE.EVOSABRE.SECTION_REMOTE",
+            "icon": "fa-wifi",
+            "description": "TRANSLATE.EVOSABRE.SECTION_REMOTE_DOC",
+            "onSave": {
+                "type": "controller",
+                "endpoint": "system_hardware/audiophonics_evo_sabre",
+                "method": "saveRemote"
+            },
+            "saveButton": {
+                "label": "TRANSLATE.EVOSABRE.SAVE",
+                "data": [
+                    "remote_active"
+                ]
+            },
+            "content": [
+                {
+                    "id": "remote_active",
+                    "element": "switch",
+                    "label": "TRANSLATE.EVOSABRE.REMOTE_ACTIVE",
+                    "doc": "TRANSLATE.EVOSABRE.REMOTE_ACTIVE_DOC",
+                    "value": true
+                },
+                {
+                    "id": "check_remote",
+                    "element": "button",
+                    "label": "TRANSLATE.EVOSABRE.CHECK_REMOTE",
+                    "doc": "TRANSLATE.EVOSABRE.CHECK_REMOTE_DOC",
+                    "onClick": {
+                        "type": "controller",
+                        "endpoint": "system_hardware/audiophonics_evo_sabre",
+                        "method": "checkRemote",
+                        "data": []
+                    }
+                }
+            ]
+        },
+        {
+            "id": "section_dac",
+            "element": "section",
+            "label": "TRANSLATE.EVOSABRE.SECTION_DAC",
+            "icon": "fa-volume-up",
+            "description": "TRANSLATE.EVOSABRE.SECTION_DAC_DOC",
+            "content": []
+        },
+        {
+            "id": "section_journal",
+            "element": "section",
+            "label": "TRANSLATE.EVOSABRE.SECTION_JOURNAL",
+            "icon": "fa-stethoscope",
+            "description": "TRANSLATE.EVOSABRE.SECTION_JOURNAL_DOC",
+            "onSave": {
+                "type": "controller",
+                "endpoint": "system_hardware/audiophonics_evo_sabre",
+                "method": "saveJournal"
+            },
+            "saveButton": {
+                "label": "TRANSLATE.EVOSABRE.SAVE",
+                "data": [
+                    "log_level"
+                ]
+            },
+            "content": [
+                {
+                    "id": "log_level",
+                    "element": "select",
+                    "label": "TRANSLATE.EVOSABRE.LOG_LEVEL",
+                    "doc": "TRANSLATE.EVOSABRE.LOG_LEVEL_DOC",
+                    "value": {
+                        "value": "error",
+                        "label": "TRANSLATE.EVOSABRE.LOG_ERROR"
+                    },
+                    "options": [
+                        {
+                            "value": "error",
+                            "label": "TRANSLATE.EVOSABRE.LOG_ERROR"
+                        },
+                        {
+                            "value": "info",
+                            "label": "TRANSLATE.EVOSABRE.LOG_INFO"
+                        },
+                        {
+                            "value": "debug",
+                            "label": "TRANSLATE.EVOSABRE.LOG_DEBUG"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

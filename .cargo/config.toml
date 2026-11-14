@@ -1,0 +1,8 @@
+# The shipped binaries are static musl builds for the 32-bit ARM userland
+# Volumio runs on every Raspberry Pi, whatever the kernel. Cargo's default
+# linker is the host cc, which cannot link ARM objects; the GNU cross driver
+# can, and the C library and start files still come from rustc's own
+# self-contained musl, so the result depends on nothing on the player.
+# Package: gcc-arm-linux-gnueabihf.
+[target.armv7-unknown-linux-musleabihf]
+linker = "arm-linux-gnueabihf-gcc"

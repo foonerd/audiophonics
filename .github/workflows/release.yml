@@ -1,0 +1,111 @@
+# The release of one plugin, on a tag <plugin>-vX.Y.Z where <plugin> is its
+# folder under plugins/: the check, the program built for the player, the
+# plugin's zip and its digest, published as a GitHub release.
+#
+#   git tag evo_sabre-v3.0.0 && git push origin evo_sabre-v3.0.0
+#
+# Run by hand, it does all of that for the plugin named and stops short of
+# publishing, so a tag is never spent finding out that the release is broken.
+name: release
+
+on:
+  push:
+    tags: ['*-v*.*.*']
+  workflow_dispatch:
+    inputs:
+      plugin:
+        description: The plugin to build without publishing, a folder under plugins/
+        required: true
+        default: evo_sabre
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      # Which plugin, and which version: the tag's two halves, or the plugin
+      # asked for and the version its program carries. A tag that does not
+      # match the program's version is refused before anything is built.
+      - name: Plugin and version
+        id: what
+        env:
+          ASKED: ${{ inputs.plugin }}
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            plugin=${GITHUB_REF_NAME%-v*}
+            tagged=${GITHUB_REF_NAME##*-v}
+          else
+            plugin=$ASKED
+            tagged=
+          fi
+          case "$plugin" in
+            ''|*[!a-z0-9_]*) echo "not a plugin name: '$plugin'" >&2; exit 1 ;;
+          esac
+          [ -f "plugins/$plugin/build.conf" ] || { echo "no plugin $plugin under plugins/" >&2; exit 1; }
+          . "plugins/$plugin/build.conf"
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' "bins/$CRATE/Cargo.toml" | head -n1)
+          if [ -n "$tagged" ] && [ "$tagged" != "$version" ]; then
+            echo "the tag says $tagged but bins/$CRATE is $version" >&2
+            exit 1
+          fi
+          pretty=$(sed -n 's/^ *"prettyName": "\(.*\)",*$/\1/p' "plugins/$plugin/package.json" | head -n1)
+          {
+            echo "plugin=$plugin"
+            echo "version=$version"
+            echo "title=$pretty $version"
+          } >> "$GITHUB_OUTPUT"
+      - name: Toolchains
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            gcc-arm-linux-gnueabihf libc6-dev-armhf-cross qemu-user shellcheck zip
+          rustup toolchain install && rustup show active-toolchain
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci
+          cache-bin: false
+          save-if: false
+      - name: Check, ship, package
+        env:
+          PLUGIN: ${{ steps.what.outputs.plugin }}
+        run: |
+          scripts/check.sh
+          scripts/ship.sh "$PLUGIN"
+          scripts/package.sh "$PLUGIN"
+          ( cd dist && sha256sum ./*.zip > SHA256SUMS && cat SHA256SUMS )
+      # The notes: the version's changelog section, then the footer.
+      - name: Release notes
+        env:
+          PLUGIN: ${{ steps.what.outputs.plugin }}
+          VERSION: ${{ steps.what.outputs.version }}
+        run: |
+          scripts/release-notes.sh "$PLUGIN" "$VERSION" > dist/notes.md
+          [ -s dist/notes.md ] || { echo "plugins/$PLUGIN/CHANGELOG.md says nothing of $VERSION" >&2; exit 1; }
+          printf '\n' >> dist/notes.md
+          cat .github/release-footer.md >> dist/notes.md
+          cat dist/notes.md
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.what.outputs.plugin }}-${{ steps.what.outputs.version }}
+          path: |
+            dist/*.zip
+            dist/SHA256SUMS
+            dist/notes.md
+      # Published as a pre-release until it has been tried on the unit; made
+      # the latest by hand (gh release edit <tag> --prerelease=false --latest).
+      - name: Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v3
+        with:
+          name: ${{ steps.what.outputs.title }}
+          prerelease: true
+          body_path: dist/notes.md
+          files: |
+            dist/*.zip
+            dist/SHA256SUMS
