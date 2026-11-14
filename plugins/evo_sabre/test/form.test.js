@@ -47,6 +47,15 @@ test('stored values fill the page and a key the store lacks leaves the page its 
     assert.equal(find('remote_active').value, true);
 });
 
+// What a player has before anything is set: the track with its time row,
+// and nothing put into its audio path.
+test('a first install shows the track time, and has the meters and click prevention off', () => {
+    assert.equal(defaults.track_time.value, true);
+    assert.equal(defaults.meters.value, false);
+    assert.equal(defaults.click_prevention.value, false);
+    assert.equal(defaults.oled_active.value, true);
+});
+
 test('the page, the store and the checks agree on every setting', () => {
     const controls = uiconf.sections.flatMap((s) => s.content).filter((e) => e.element !== 'button');
     const ids = controls.map((e) => e.id).sort();

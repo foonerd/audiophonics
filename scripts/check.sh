@@ -69,6 +69,10 @@ for conf in plugins/*/build.conf; do
   echo "$plugin $plugin_version"
 done
 
+# The languages a release to the store carries beside English: the set the
+# house's other plugins ship.
+STORE_LANGUAGES="de es fr it ja nl pl pt ru zh"
+
 # Node runs the checks of the plugins' files: here where it is installed,
 # else in the node image.
 if command -v node >/dev/null 2>&1; then
@@ -162,6 +166,21 @@ for (const file of files.filter((f) => f !== enFile)) {
 if (bad) process.exit(1);
 console.log((files.length - 1) + ' language files complete');
 JS
+
+  # A build for the bench (x.99.z) may carry fewer languages than a release
+  # to the store, which carries the set the house's other plugins do.
+  version=$(sed -n 's/^ *"version": "\(.*\)",*$/\1/p' "$plugin/package.json" | head -n1)
+  case "$version" in
+    *.99.*) ;;
+    *)
+      for lang in $STORE_LANGUAGES; do
+        if [ ! -f "$plugin/i18n/strings_$lang.json" ]; then
+          echo "check: $plugin $version is a release to the store and has no strings_$lang.json (it carries: $STORE_LANGUAGES)" >&2
+          exit 1
+        fi
+      done
+      ;;
+  esac
 
   echo "check: $plugin code"
   for script in "$plugin"/index.js "$plugin"/lib/*.js; do

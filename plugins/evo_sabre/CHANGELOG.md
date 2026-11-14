@@ -2,6 +2,10 @@
 
 All notable changes to the Audiophonics Evo Sabre plugin are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.99.8] - 2026-11-14
+
+- **Click prevention no longer fails the first 24-bit track after a 16-bit one.** The program behind it crashed when a stream followed another at the same sample rate in a wider format, as the first track after Volumio's startup sound often is: the player said it could not open the audio output, and playing again worked. The plugin now ships Audio Keepalive 2.1.2, where that is fixed.
+
 ## [2.99.7] - 2026-11-14
 
 - **Meters: gain**, from -12 to 12 dB, added to what the level meters show. It moves the meters only; what is played is not touched.
