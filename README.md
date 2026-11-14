@@ -8,7 +8,7 @@ Each plugin ships a small native program written in Rust and a thin plugin aroun
 
 | Plugin | Store name | Hardware | Status |
 | --- | --- | --- | --- |
-| [Evo Sabre](plugins/evo_sabre/README.md) | `audiophonics_evo_sabre` | EVO Sabre: second OLED display, remote | 2.99 builds on the bench; 3.0.0 will be its first release to the store |
+| [Evo Sabre](plugins/evo_sabre/README.md) | `audiophonics_evo_sabre` | EVO Sabre: second OLED display, remote | 3.0.0, a rewrite of version 2 |
 
 ## Supported boards
 
@@ -56,9 +56,9 @@ The files are binary PGM, 256 x 64. `magick playing.pgm -filter point -resize 40
 
 Copy the zip to the player and install it as any plugin zip:
 
-    scp dist/audiophonics_evo_sabre-2.99.0.zip volumio@volumio.local:
+    scp dist/audiophonics_evo_sabre-3.0.0.zip volumio@volumio.local:
     ssh volumio@volumio.local
-    mkdir evo && cd evo && miniunzip ../audiophonics_evo_sabre-2.99.0.zip && volumio plugin install
+    mkdir evo && cd evo && miniunzip ../audiophonics_evo_sabre-3.0.0.zip && volumio plugin install
 
 `volumio plugin install` installs the plugin's Node dependencies on the player, so the player needs the network for it; the zip carries no `node_modules`, as the plugin store requires.
 
@@ -66,17 +66,17 @@ A plugin that changes the boot configuration says so when it is installed; resta
 
 ## Releases
 
-A release is one plugin at one version. Its tag is the plugin's folder and the version, `evo_sabre-v2.99.0`, and the version is the one its program carries in `bins/<program>/Cargo.toml`; the plugin's `package.json` and `CHANGELOG.md` must agree, and the check says so when they do not.
+A release is one plugin at one version. Its tag is the plugin's folder and the version, `evo_sabre-v3.0.0`, and the version is the one its program carries in `bins/<program>/Cargo.toml`; the plugin's `package.json` and `CHANGELOG.md` must agree, and the check says so when they do not.
 
-    git tag evo_sabre-v2.99.0 && git push origin evo_sabre-v2.99.0
+    git tag evo_sabre-v3.0.0 && git push origin evo_sabre-v3.0.0
 
-A new major version is numbered below itself while it is on the bench: the builds of what will be 3.0.0 are 2.99.0, 2.99.1 and so on, and the round number is kept for the first build that has run on the unit and been accepted by the plugin store.
+A new major version is numbered below itself while it is on the bench: the builds of what became 3.0.0 were 2.99.0, 2.99.1 and so on, and the round number is kept for the first build that has run on the unit and been accepted by the plugin store.
 
 A release to the store carries its settings page in English and in German, Spanish, French, Italian, Japanese, Dutch, Polish, Portuguese, Russian and Chinese; `scripts/check.sh` refuses one that does not. A build for the bench may carry fewer.
 
-The tag runs the check, builds the program, packages the plugin and publishes the zip with its SHA-256 as a pre-release, with that version's section of the plugin's changelog as the notes. A pre-release becomes the latest release once it has run on the unit it is for:
+The tag runs the check, builds the program, packages the plugin and publishes the zip with its SHA-256 as a pre-release, with that version's section of the plugin's changelog as the notes. A build for the bench stays a pre-release; a release to the store becomes the latest release once its zip has been looked at:
 
-    gh release edit evo_sabre-v2.99.0 --prerelease=false --latest
+    gh release edit evo_sabre-v3.0.0 --prerelease=false --latest
 
 The release workflow can also be run by hand for a plugin; it then builds everything and publishes nothing.
 

@@ -1,9 +1,3 @@
----
-
-### Before you install
-
-This is published as a pre-release until it has run on the unit it is for. Install it from the zip on a player you can reach over SSH, and say what you see: https://github.com/foonerd/audiophonics/issues
-
 ### Support this project
 
 The Audiophonics plugins are free and open source, designed, built and maintained by one developer in his own time, on hardware Audiophonics donated. If they have earned a place on your player, you can support their development:

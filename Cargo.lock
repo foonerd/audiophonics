@@ -112,7 +112,7 @@ dependencies = [
 
 [[package]]
 name = "evosabre-panel"
-version = "2.99.9"
+version = "3.0.0"
 dependencies = [
  "audiophonics-base",
  "audiophonics-player",

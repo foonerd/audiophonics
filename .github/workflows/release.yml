@@ -79,7 +79,9 @@ jobs:
           scripts/ship.sh "$PLUGIN"
           scripts/package.sh "$PLUGIN"
           ( cd dist && sha256sum ./*.zip > SHA256SUMS && cat SHA256SUMS )
-      # The notes: the version's changelog section, then the footer.
+      # The notes: the version's changelog section, a word on installing that
+      # depends on whether this is a build for the bench (x.99.z) or a
+      # release to the store, then the footer.
       - name: Release notes
         env:
           PLUGIN: ${{ steps.what.outputs.plugin }}
@@ -87,8 +89,11 @@ jobs:
         run: |
           scripts/release-notes.sh "$PLUGIN" "$VERSION" > dist/notes.md
           [ -s dist/notes.md ] || { echo "plugins/$PLUGIN/CHANGELOG.md says nothing of $VERSION" >&2; exit 1; }
-          printf '\n' >> dist/notes.md
-          cat .github/release-footer.md >> dist/notes.md
+          case "$VERSION" in
+            *.99.*) before=.github/release-bench.md ;;
+            *) before=.github/release-store.md ;;
+          esac
+          { printf '\n---\n\n'; cat "$before"; printf '\n'; cat .github/release-footer.md; } >> dist/notes.md
           cat dist/notes.md
       - uses: actions/upload-artifact@v7
         with:
@@ -97,8 +102,9 @@ jobs:
             dist/*.zip
             dist/SHA256SUMS
             dist/notes.md
-      # Published as a pre-release until it has been tried on the unit; made
-      # the latest by hand (gh release edit <tag> --prerelease=false --latest).
+      # Published as a pre-release, whatever the version: made the latest by
+      # hand once its zip has been looked at
+      # (gh release edit <tag> --prerelease=false --latest).
       - name: Release
         if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v3
