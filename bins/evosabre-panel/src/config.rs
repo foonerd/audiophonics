@@ -18,6 +18,37 @@ pub const DEFAULT_PATH: &str =
     "/data/configuration/system_hardware/audiophonics_evo_sabre/config.json";
 const PLUGIN_DIR: &str = "/data/plugins/system_hardware/audiophonics_evo_sabre";
 
+/// The segments of the clock's digits that are not lit: left dark, or
+/// drawn in one of the panel's two faintest greys, as the ghost of an LED
+/// digit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Unlit {
+    Off,
+    Faint,
+    Dim,
+}
+
+impl Unlit {
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.trim() {
+            "off" => Some(Self::Off),
+            "faint" => Some(Self::Faint),
+            "dim" => Some(Self::Dim),
+            _ => None,
+        }
+    }
+
+    /// The grey to draw them in. One is the level the panel's grey scale
+    /// gives a quarter of the next one's light; see `ssd1322::GREYS`.
+    pub fn level(self) -> u8 {
+        match self {
+            Self::Off => 0,
+            Self::Faint => 1,
+            Self::Dim => 2,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Config {
     pub player_base: String,
@@ -55,6 +86,8 @@ pub struct Config {
     /// How long the player must have rested, paused or stopped, before the
     /// clock replaces the track. Zero keeps the track for ever.
     pub clock_after: Duration,
+    /// How the clock draws the segments of its digits that are not lit.
+    pub clock_segments: Unlit,
 
     /// Whether the handset's transport keys are obeyed.
     pub remote: bool,
@@ -88,6 +121,7 @@ impl Default for Config {
             dim_after: Duration::from_secs(1200),
             blank_after: Duration::from_secs(3600),
             clock_after: Duration::from_secs(6),
+            clock_segments: Unlit::Faint,
 
             remote: true,
             log_level: Level::Error,
@@ -171,6 +205,13 @@ pub fn from_store(store: &Store) -> (Config, Vec<String>) {
         c.reset_gpio = v as u32;
     }
 
+    if let Some(v) = store.text("clock_segments") {
+        match Unlit::parse(&v) {
+            Some(unlit) => c.clock_segments = unlit,
+            None => problems.push(format!("clock_segments: not off, faint or dim: {v}")),
+        }
+    }
+
     match store.switch("remote_active") {
         Ok(Some(v)) => c.remote = v,
         Ok(None) => {}
@@ -219,6 +260,7 @@ mod tests {
         assert_eq!(c.dim_after, Duration::from_secs(1200));
         assert_eq!(c.blank_after, Duration::from_secs(3600));
         assert_eq!(c.clock_after, Duration::from_secs(6));
+        assert_eq!(c.clock_segments, Unlit::Faint);
         assert!(c.remote);
         assert_eq!(c.log_level, Level::Error);
         assert!(c
@@ -239,6 +281,7 @@ mod tests {
             "sleep_after": { "type": "number", "value": 300 },
             "deep_sleep_after": { "type": "number", "value": 0 },
             "clock_after": { "type": "number", "value": "30" },
+            "clock_segments": { "type": "string", "value": "off" },
             "log_level": { "type": "string", "value": "info" }
         }"#,
         )
@@ -250,6 +293,7 @@ mod tests {
         assert_eq!(c.dim_after, Duration::from_secs(300));
         assert_eq!(c.blank_after, Duration::ZERO);
         assert_eq!(c.clock_after, Duration::from_secs(30));
+        assert_eq!(c.clock_segments, Unlit::Off);
         assert_eq!(c.log_level, Level::Info);
         assert_eq!(c.dc_gpio, 27, "a key that is absent leaves its default");
     }

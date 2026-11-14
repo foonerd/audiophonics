@@ -532,7 +532,7 @@ fn run(path: &str) -> Result<(), String> {
                 layout::Screen::Clock => clock.now(),
             };
             match &time {
-                Some(t) => layout::clock(&mut frame, &state, &ip, t),
+                Some(t) => layout::clock(&mut frame, &state, &ip, t, cfg.clock_segments.level()),
                 None => screen.render(&mut frame, &state, &ip, now, &mut font),
             }
             moving = time.is_none() && screen.scrolling();

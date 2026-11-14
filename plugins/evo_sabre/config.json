@@ -19,6 +19,10 @@
         "type": "number",
         "value": 6
     },
+    "clock_segments": {
+        "type": "string",
+        "value": "faint"
+    },
     "sleep_after": {
         "type": "number",
         "value": 1200

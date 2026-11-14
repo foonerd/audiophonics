@@ -25,8 +25,6 @@ pub const ICON: u8 = 12;
 pub const QUIET: u8 = 6;
 pub const HAIRLINE: u8 = 5;
 pub const BAR_TRACK: u8 = 3;
-/// Unlit segments of the clock's digits.
-pub const GHOST: u8 = 2;
 pub const BAR_FILL: u8 = 12;
 
 /// The picture's width: one less than the panel, as is its height, so the
@@ -241,11 +239,11 @@ impl Playing {
 
 /// The screen after a long rest: the time, large, and the date beside it,
 /// under the same chrome.
-pub fn clock(f: &mut Frame, s: &State, ip: &str, t: &LocalTime) {
+pub fn clock(f: &mut Frame, s: &State, ip: &str, t: &LocalTime, unlit: u8) {
     chrome(f, s, ip, false);
     // 48 px of digits centred in the rows under the hairline.
     let top = HAIRLINE_Y + 1 + (H_BELOW - segments::DIGIT_H) / 2;
-    segments::draw(f, 4, top, &t.hhmm(), ICON, GHOST);
+    segments::draw(f, 4, top, &t.hhmm(), ICON, unlit);
     let cw = FONT_7X13.character_size.width;
     for (i, line) in [t.weekday_name().to_string(), t.date_line()]
         .iter()
@@ -445,7 +443,7 @@ pub mod tests {
             bitdepth: "16 bit".into(),
             ..State::default()
         };
-        clock(&mut f, &stopped, "192.168.1.42", &wednesday());
+        clock(&mut f, &stopped, "192.168.1.42", &wednesday(), 1);
         assert!(
             (4..24).any(|x| (15..55).any(|y| f.get(x, y) == ICON)),
             "first digit"

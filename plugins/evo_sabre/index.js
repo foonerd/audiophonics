@@ -365,7 +365,7 @@ EvoSabre.prototype.save = function (data, keys) {
 EvoSabre.prototype.saveDisplay = function (data) {
     var self = this;
     var was = form.isOn(self.config.get('oled_active'), true);
-    if (!self.save(data, ['oled_active', 'contrast', 'clock_after', 'sleep_after', 'deep_sleep_after'])) {
+    if (!self.save(data, ['oled_active', 'contrast', 'clock_after', 'clock_segments', 'sleep_after', 'deep_sleep_after'])) {
         return libQ.resolve();
     }
     if (form.isOn(self.config.get('oled_active'), true) !== was) {

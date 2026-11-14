@@ -2,6 +2,11 @@
 
 All notable changes to the Audiophonics Evo Sabre plugin are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.99.4] - 2026-11-14
+
+- **The clock is easier to read.** The segments of its digits that are not lit were drawn in the faintest grey the display's standard grey scale has, which beside the lit ones was still too bright. The display now has one fainter grey, a quarter of that, and the unlit segments use it.
+- **Clock digits: unlit segments**, a new setting: Dark, Faint (as above) or Dim (as before).
+
 ## [2.99.3] - 2026-11-14
 
 - **Click prevention plays on a player with Volumio's multiroom in its audio path.** With the switch on, nothing played, the startup sound included: Volumio's multiroom switcher refused the program behind Click prevention as its output. The music now reaches that program through a pass-through the switcher accepts; every sample arrives as it was sent.

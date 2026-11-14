@@ -36,6 +36,7 @@ Installing over version 2 of the plugin replaces it and starts the new display a
 | Display on | Off stops the display's program: the display stays dark and the transport keys are not read. |
 | Brightness | 1 to 255. |
 | Clock after | Seconds of rest before the clock replaces the track. 0 keeps the track. |
+| Clock digits: unlit segments | The segments of the clock's digits that are not lit: Dark, Faint (the faintest grey the display shows) or Dim (the next one up). |
 | Dim after | Seconds after the last key on the remote, or after playback started, before the display dims. 0 never dims. |
 | Dark after | Seconds after the last key, while nothing plays, before the display goes dark. 0 never goes dark. |
 | Obey the transport keys | Off leaves the remote to the DAC board alone. |

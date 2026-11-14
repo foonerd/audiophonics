@@ -123,7 +123,13 @@ pub fn all(dir: &Path, cfg: &Config) -> Result<Vec<PathBuf>, String> {
         minute: 7,
         weekday: 3,
     };
-    layout::clock(&mut frame, &stopped, ADDRESS, &wednesday);
+    layout::clock(
+        &mut frame,
+        &stopped,
+        ADDRESS,
+        &wednesday,
+        crate::config::Unlit::Faint.level(),
+    );
     shots.push(("clock", frame));
 
     let mut written = Vec::new();

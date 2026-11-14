@@ -20,6 +20,7 @@
                     "oled_active",
                     "contrast",
                     "clock_after",
+                    "clock_segments",
                     "sleep_after",
                     "deep_sleep_after"
                 ]
@@ -67,6 +68,30 @@
                         },
                         {
                             "step": 1
+                        }
+                    ]
+                },
+                {
+                    "id": "clock_segments",
+                    "element": "select",
+                    "label": "TRANSLATE.EVOSABRE.CLOCK_SEGMENTS",
+                    "doc": "TRANSLATE.EVOSABRE.CLOCK_SEGMENTS_DOC",
+                    "value": {
+                        "value": "faint",
+                        "label": "TRANSLATE.EVOSABRE.CLOCK_SEGMENTS_FAINT"
+                    },
+                    "options": [
+                        {
+                            "value": "off",
+                            "label": "TRANSLATE.EVOSABRE.CLOCK_SEGMENTS_OFF"
+                        },
+                        {
+                            "value": "faint",
+                            "label": "TRANSLATE.EVOSABRE.CLOCK_SEGMENTS_FAINT"
+                        },
+                        {
+                            "value": "dim",
+                            "label": "TRANSLATE.EVOSABRE.CLOCK_SEGMENTS_DIM"
                         }
                     ]
                 },
