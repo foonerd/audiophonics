@@ -2,6 +2,11 @@
 
 All notable changes to the Audiophonics Evo Sabre plugin are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.99.9] - 2026-11-14
+
+- **The speaker is crossed only at volume 0**, as it was in version 2. The player's own mute flag is no longer shown: with this DAC it reads muted whenever the player last looked at the mixer while nothing played, and went on saying so while music played.
+- **The settings page in nine more languages:** German, Spanish, Italian, Japanese, Dutch, Polish, Portuguese, Russian and Chinese, beside English and French.
+
 ## [2.99.8] - 2026-11-14
 
 - **Click prevention no longer fails the first 24-bit track after a 16-bit one.** The program behind it crashed when a stream followed another at the same sample rate in a wider format, as the first track after Volumio's startup sound often is: the player said it could not open the audio output, and playing again worked. The plugin now ships Audio Keepalive 2.1.2, where that is fixed.

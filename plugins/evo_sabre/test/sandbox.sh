@@ -71,7 +71,7 @@ player() {
   rm -f /boot/config.txt /boot/volumioconfig.txt "$USERCONFIG"
   mkdir -p "$PLUGIN/bin" "$ACTIVE" "$FAILING" /boot /etc/systemd/system /etc/udev/rules.d /etc/sudoers.d
   cp -r /src/. "$PLUGIN/"
-  printf '#!/bin/sh\necho "evosabre-panel 2.99.8"\n' > "$PLUGIN/bin/evosabre-panel"
+  printf '#!/bin/sh\necho "evosabre-panel 2.99.9"\n' > "$PLUGIN/bin/evosabre-panel"
   printf '#!/bin/sh\necho "audio-keepalive-daemon 2.1.2"\n' > "$PLUGIN/keepalive/audio-keepalive-daemon"
   printf 'dtparam=audio=on\n' > /boot/config.txt
   : > "$CALLS"

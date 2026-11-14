@@ -126,7 +126,9 @@ fn chrome(f: &mut Frame, s: &State, ip: &str, with_format: bool) {
     };
     icons::draw(f, transport, 2, 0, ICON);
 
-    let silent = s.mute || s.volume == Some(0);
+    // The speaker is crossed at volume 0 and not for the player's mute
+    // flag, which with this DAC says muted while music plays.
+    let silent = s.volume == Some(0);
     let speaker = if silent {
         &icons::SPEAKER_OFF
     } else {
@@ -596,9 +598,9 @@ pub mod tests {
     }
 
     #[test]
-    fn muted_swaps_the_speaker_and_quietens_the_number() {
+    fn volume_zero_crosses_the_speaker_and_quietens_the_number() {
         let mut s = dire_straits();
-        s.mute = true;
+        s.volume = Some(0);
         let f = render(&s, "192.168.1.42");
         let fr = &f;
         let brightest = (31..49)
@@ -606,6 +608,14 @@ pub mod tests {
             .max()
             .unwrap();
         assert_eq!(brightest, QUIET);
+    }
+
+    #[test]
+    fn the_players_mute_flag_alone_changes_nothing() {
+        let plain = render(&dire_straits(), "192.168.1.42");
+        let mut s = dire_straits();
+        s.mute = true;
+        assert_eq!(render(&s, "192.168.1.42"), plain);
     }
 
     #[test]

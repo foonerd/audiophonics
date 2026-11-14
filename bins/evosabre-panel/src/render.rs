@@ -57,7 +57,7 @@ pub fn all(dir: &Path, cfg: &Config) -> Result<Vec<PathBuf>, String> {
 
     let mut paused = playing();
     paused.status = "pause".into();
-    paused.mute = true;
+    paused.volume = Some(0);
     paused.repeat = true;
     paused.random = true;
     paused.seek = Some(201_000);
@@ -98,7 +98,7 @@ pub fn all(dir: &Path, cfg: &Config) -> Result<Vec<PathBuf>, String> {
 
     for (name, state, after) in [
         ("playing", &playing(), Duration::ZERO),
-        ("paused-muted-repeat-shuffle", &paused, Duration::ZERO),
+        ("paused-silent-repeat-shuffle", &paused, Duration::ZERO),
         ("long", &long, Duration::from_millis(3200)),
         ("radio", &radio, Duration::ZERO),
         ("scripts", &scripts, Duration::ZERO),
