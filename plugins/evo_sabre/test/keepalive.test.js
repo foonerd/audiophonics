@@ -45,6 +45,16 @@ test('the daemon is started on the PCM and the socket the contribution names', (
     assert.ok(start.indexOf('/audiophonics_evo_sabre/keepalive/audio-keepalive-daemon ') !== -1, start);
 });
 
+// Volumio's startup sound is 16-bit stereo at 44.1 kHz and follows its
+// startup volume by a few milliseconds. An output that idles at that rate is
+// not opened again for it, so the DAC's clocks do not change as the volume
+// is written.
+test('the daemon idles at the rate of Volumio\'s startup sound', () => {
+    const unit = fs.readFileSync(path.join(__dirname, '..', 'systemd', 'evosabre-keepalive.service'), 'utf8');
+    const start = unit.split('\n').filter((line) => line.indexOf('ExecStart=') === 0)[0];
+    assert.ok(start.indexOf(' --rate 44100 ') !== -1, start);
+});
+
 test('the chain carries the contribution only once Volumio has written it in', () => {
     const chain = 'pcm.volumio {\n    slave.pcm "evosabreKeepalive"\n}\n' + keepalive.contribution('/p') + 'pcm.evosabreKeepaliveOut {\n';
     assert.equal(keepalive.inChain(chain), true);

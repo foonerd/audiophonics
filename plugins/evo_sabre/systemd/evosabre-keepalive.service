@@ -6,7 +6,7 @@ Wants=sound.target
 
 [Service]
 Type=simple
-ExecStart=/data/plugins/system_hardware/audiophonics_evo_sabre/keepalive/audio-keepalive-daemon --pcm evosabreKeepaliveOut --fallback-pcm volumioOutput --socket /run/evosabre-keepalive/ctl.sock
+ExecStart=/data/plugins/system_hardware/audiophonics_evo_sabre/keepalive/audio-keepalive-daemon --pcm evosabreKeepaliveOut --fallback-pcm volumioOutput --rate 44100 --socket /run/evosabre-keepalive/ctl.sock
 Restart=always
 RestartSec=1
 SyslogIdentifier=evosabre-keepalive

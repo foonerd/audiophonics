@@ -3,7 +3,7 @@
 # release and verified against the evo release key (keys/release-signing.pub)
 # before anything of it is packed.
 NAME=audio_keepalive
-VERSION=2.1.2
+VERSION=2.1.3
 REPOSITORY=foonerd/alsa-pcm-keepalive
 # What a plugin takes from the release: the file there, where it goes in the
 # plugin, and its mode. The arm build is the one for Volumio's Raspberry Pi

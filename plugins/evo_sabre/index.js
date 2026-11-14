@@ -18,6 +18,7 @@ var form = require('./lib/form');
 var keepalive = require('./lib/keepalive');
 var tap = require('./lib/tap');
 var volume = require('./lib/volume');
+var sequence = require('./lib/sequence');
 
 var SERVICE = 'evosabre-panel.service';
 var KEEPALIVE_SERVICE = 'evosabre-keepalive.service';
@@ -39,6 +40,8 @@ function EvoSabre(context) {
     this.configManager = context.configManager;
     this.reloadTimer = null;
     this.chainTimer = null;
+    this.pathTimers = [];
+    this.pathPending = null;
 }
 
 EvoSabre.prototype.onVolumioStart = function () {
@@ -189,19 +192,17 @@ EvoSabre.prototype.askRestartIfNeeded = function () {
 // -----------------------------------------------------------------------------
 
 // Volumio's ALSA configuration, written again from every plugin's
-// contribution. Where the file changed, Volumio has had ALSA restore its
-// stored mixer state, so the volume and the mute the player had are asked
-// for again. Resolves whatever becomes of it: the page says the rest.
+// contribution. Resolves with whether Volumio wrote a new file, which is
+// when it has ALSA restore its stored mixer state; resolves whatever
+// becomes of it, and the page says the rest.
 EvoSabre.prototype.rebuildAlsa = function () {
     var self = this;
     var defer = libQ.defer();
     var done = false;
-    var was = self.volumeNow();
     var finish = function (result) {
         if (done) { return; }
         done = true;
-        if (result && result.changed) { self.restoreVolume(was); }
-        defer.resolve();
+        defer.resolve(Boolean(result && result.changed));
     };
     var asked;
     try {
@@ -227,19 +228,51 @@ EvoSabre.prototype.volumeNow = function () {
     }
 };
 
-// The volume first, which also unmutes; the mute a moment later, once
-// Volumio has the volume to come back to.
-EvoSabre.prototype.restoreVolume = function (was) {
+// Whatever is still due from an earlier change of the audio path is
+// dropped: a later change has its own order.
+EvoSabre.prototype.cancelPath = function () {
+    (this.pathTimers || []).forEach(function (timer) { clearTimeout(timer); });
+    this.pathTimers = [];
+    if (this.pathPending) {
+        // Whoever waited on the earlier change is let go.
+        this.pathPending.resolve();
+        this.pathPending = null;
+    }
+};
+
+// The steps lib/sequence.js gives, each at its time. Resolves when the last
+// is done, and rejects if the program behind Click prevention did not
+// start.
+EvoSabre.prototype.carryOut = function (steps) {
     var self = this;
-    volume.steps(was).forEach(function (step, i) {
-        setTimeout(function () {
+    var defer = libQ.defer();
+    var left = steps.length;
+    var failure = null;
+    if (!left) { return libQ.resolve(); }
+    self.pathPending = defer;
+    var done = function () {
+        left -= 1;
+        if (left > 0) { return; }
+        if (self.pathPending === defer) { self.pathPending = null; }
+        if (failure) { defer.reject(failure); } else { defer.resolve(); }
+    };
+    steps.forEach(function (s) {
+        self.pathTimers.push(setTimeout(function () {
+            if (s.step === 'start') {
+                self.systemctl('restart', KEEPALIVE_SERVICE)
+                    .then(done)
+                    .fail(function (e) { failure = e; done(); });
+                return;
+            }
             try {
-                self.commandRouter.volumiosetvolume(step);
+                self.commandRouter.volumiosetvolume(s.value);
             } catch (e) {
                 self.logger.error(id + 'volume: ' + e);
             }
-        }, i * 1000);
+            done();
+        }, s.at));
     });
+    return defer.promise;
 };
 
 // One contribution's file as it should stand: written with `text`, or gone
@@ -267,15 +300,19 @@ EvoSabre.prototype.audioPathWanted = function () {
     };
 };
 
-// The audio path as the settings stand. The keeper's daemon is stopped
-// first where it is going; both contributions are written or removed; the
-// configuration is rebuilt once around them; the daemon is started where it
-// is staying. Volumio rewrites its configuration only if it came out
-// different.
+// The audio path as the settings stand, in an order that keeps writes to
+// the DAC board apart from changes of its clocks (lib/sequence.js). The
+// program behind Click prevention is stopped first, so that nothing of the
+// plugin's holds the output; both contributions are written or removed;
+// the configuration is rebuilt once around them, and Volumio restores the
+// mixer if it came out different; then, each after a quiet moment, the
+// volume the player had is asked for again and the program is started
+// where it is wanted.
 EvoSabre.prototype.applyAudioPath = function () {
     var self = this;
     var name = self.commandRouter.getI18nString('EVOSABRE.PLUGIN_NAME');
     var want = self.audioPathWanted();
+    var was = self.volumeNow();
     var failed = function (e) {
         self.commandRouter.pushToastMessage('error', name,
             self.commandRouter.getI18nString('EVOSABRE.PATH_FAILED').replace('{{error}}', e && e.message ? e.message : e));
@@ -283,17 +320,16 @@ EvoSabre.prototype.applyAudioPath = function () {
     if (want.standalone) {
         self.commandRouter.pushToastMessage('info', name, self.commandRouter.getI18nString('EVOSABRE.CLICK_STANDALONE'));
     }
-    var before = want.keeper
-        ? libQ.resolve()
-        : self.systemctl('stop', KEEPALIVE_SERVICE).fail(function () { /* not running */ });
-    return before
+    self.cancelPath();
+    return self.systemctl('stop', KEEPALIVE_SERVICE)
+        .fail(function () { /* not running */ })
         .then(function () {
             self.contribute(keepalive.CONTRIBUTION, want.keeper ? keepalive.contribution(__dirname) : null);
             self.contribute(tap.CONTRIBUTION, want.tap ? tap.contribution(__dirname) : null);
             return self.rebuildAlsa();
         })
-        .then(function () {
-            return want.keeper ? self.systemctl('restart', KEEPALIVE_SERVICE) : libQ.resolve();
+        .then(function (changed) {
+            return self.carryOut(sequence.after(changed, was, want.keeper));
         })
         .then(function () {
             if (want.keeper || want.tap) { self.checkChain(want); }
@@ -301,9 +337,12 @@ EvoSabre.prototype.applyAudioPath = function () {
         .fail(failed);
 };
 
-// Out of the audio path altogether, as the plugin stops.
+// Out of the audio path altogether, as the plugin stops. The volume is put
+// back after the same quiet moment, and is not waited for.
 EvoSabre.prototype.leaveAudioPath = function () {
     var self = this;
+    var was = self.volumeNow();
+    self.cancelPath();
     return self.systemctl('stop', KEEPALIVE_SERVICE)
         .fail(function () { /* not running */ })
         .then(function () {
@@ -315,7 +354,10 @@ EvoSabre.prototype.leaveAudioPath = function () {
             } catch (e) {
                 self.logger.error(id + 'audio path: ' + e.message);
             }
-            return had ? self.rebuildAlsa() : libQ.resolve();
+            return had ? self.rebuildAlsa() : libQ.resolve(false);
+        })
+        .then(function (changed) {
+            self.carryOut(sequence.after(changed, was, false));
         });
 };
 

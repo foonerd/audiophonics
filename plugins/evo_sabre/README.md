@@ -92,6 +92,8 @@ It says which board it found, how it opened the display, what the player is doin
 
 **Nothing plays with Click prevention on.** Look at its service: `systemctl status evosabre-keepalive`. While it is not running the audio path it is part of leads nowhere; switch Click prevention off to play without it.
 
+**The volume and the mute do nothing, on a Raspberry Pi 5 or Compute Module 5.** The DAC board's own microcontroller has stopped answering the player. `dmesg | grep -i sabre` shows failed transfers, and after a restart `Audiophonics Device ID : FFFFFF87`. Switch the unit off and take its power away for ten seconds; a restart alone does not bring it back. What is known of this is in the [hardware notes](https://github.com/foonerd/audiophonics/blob/main/hardware/evo-sabre.md).
+
 **The remote does nothing.** Press a key, then Check the remote on the settings page. *Not found* means the receiver's overlay is not loaded: restart the player. The display looks for the receiver again every few seconds, so one that comes up late is picked up. A receiver that is read but reports no key has not had its decoder switched on:
 
     cat /sys/class/rc/rc*/protocols
