@@ -96,10 +96,14 @@ installed upgrade
 dtoverlay=gpio-ir,gpio_pin=4' ] || fail "upgrade: the boot configuration was touched"
 echo "$out" | grep -q "Restart the player once" && fail "upgrade: asked for a restart with nothing changed"
 for old in evo_oled2 evo_remote evo_irexec; do
-  [ ! -e "/etc/systemd/system/$old.service" ] && [ ! -L "/etc/systemd/system/$old.service" ] || fail "upgrade: $old.service is still there"
+  if [ -e "/etc/systemd/system/$old.service" ] || [ -L "/etc/systemd/system/$old.service" ]; then
+    fail "upgrade: $old.service is still there"
+  fi
   grep -q "^systemctl stop $old.service" "$CALLS" || fail "upgrade: $old was not stopped"
 done
-[ ! -e "$PLUGIN/apps" ] && [ ! -e "$PLUGIN/service" ] || fail "upgrade: version 2's folders are still there"
+if [ -e "$PLUGIN/apps" ] || [ -e "$PLUGIN/service" ]; then
+  fail "upgrade: version 2's folders are still there"
+fi
 echo "ok: an install over version 2 removes its services and keeps its boot lines"
 
 # --- The receiver's overlay written another way is not written twice. --------
