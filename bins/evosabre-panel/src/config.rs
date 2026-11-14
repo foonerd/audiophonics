@@ -11,6 +11,7 @@
 //! and says in the journal what was wrong with it.
 
 use crate::grey;
+use crate::layout::Place;
 use audiophonics_base::log::Level;
 use audiophonics_base::settings::Store;
 use std::time::Duration;
@@ -18,6 +19,17 @@ use std::time::Duration;
 pub const DEFAULT_PATH: &str =
     "/data/configuration/system_hardware/audiophonics_evo_sabre/config.json";
 const PLUGIN_DIR: &str = "/data/plugins/system_hardware/audiophonics_evo_sabre";
+
+/// Where the level meters stand when they are on: lying under the track,
+/// or upright at one side of it.
+pub fn meter_place(s: &str) -> Option<Place> {
+    match s.trim() {
+        "horizontal" => Some(Place::Under),
+        "vertical_left" => Some(Place::Left),
+        "vertical_right" => Some(Place::Right),
+        _ => None,
+    }
+}
 
 /// The segments of the clock's digits that are not lit: left dark, or
 /// drawn in one of the panel's three faintest greys, as the ghost of an LED
@@ -92,6 +104,8 @@ pub struct Config {
     pub clock_after: Duration,
     /// How the clock draws the segments of its digits that are not lit.
     pub clock_segments: Unlit,
+    /// The level meters: off, or where they stand beside the track.
+    pub meters: Option<Place>,
 
     /// Whether the handset's transport keys are obeyed.
     pub remote: bool,
@@ -125,7 +139,8 @@ impl Default for Config {
             dim_after: Duration::from_secs(1200),
             blank_after: Duration::from_secs(3600),
             clock_after: Duration::from_secs(6),
-            clock_segments: Unlit::Faint,
+            clock_segments: Unlit::VeryFaint,
+            meters: None,
 
             remote: true,
             log_level: Level::Error,
@@ -218,6 +233,21 @@ pub fn from_store(store: &Store) -> (Config, Vec<String>) {
         }
     }
 
+    let mut place = Place::Under;
+    if let Some(v) = store.text("meters_style") {
+        match meter_place(&v) {
+            Some(p) => place = p,
+            None => problems.push(format!(
+                "meters_style: not horizontal, vertical_left or vertical_right: {v}"
+            )),
+        }
+    }
+    match store.switch("meters") {
+        Ok(Some(true)) => c.meters = Some(place),
+        Ok(Some(false)) | Ok(None) => c.meters = None,
+        Err(e) => problems.push(e),
+    }
+
     match store.switch("remote_active") {
         Ok(Some(v)) => c.remote = v,
         Ok(None) => {}
@@ -266,7 +296,8 @@ mod tests {
         assert_eq!(c.dim_after, Duration::from_secs(1200));
         assert_eq!(c.blank_after, Duration::from_secs(3600));
         assert_eq!(c.clock_after, Duration::from_secs(6));
-        assert_eq!(c.clock_segments, Unlit::Faint);
+        assert_eq!(c.clock_segments, Unlit::VeryFaint);
+        assert_eq!(c.meters, None);
         assert!(c.remote);
         assert_eq!(c.log_level, Level::Error);
         assert!(c
@@ -288,6 +319,8 @@ mod tests {
             "deep_sleep_after": { "type": "number", "value": 0 },
             "clock_after": { "type": "number", "value": "30" },
             "clock_segments": { "type": "string", "value": "off" },
+            "meters": { "type": "boolean", "value": true },
+            "meters_style": { "type": "string", "value": "vertical_right" },
             "log_level": { "type": "string", "value": "info" }
         }"#,
         )
@@ -300,6 +333,7 @@ mod tests {
         assert_eq!(c.blank_after, Duration::ZERO);
         assert_eq!(c.clock_after, Duration::from_secs(30));
         assert_eq!(c.clock_segments, Unlit::Off);
+        assert_eq!(c.meters, Some(Place::Right));
         assert_eq!(c.log_level, Level::Info);
         assert_eq!(c.dc_gpio, 27, "a key that is absent leaves its default");
     }
@@ -358,5 +392,31 @@ mod tests {
         assert!(!a.rewired(&b));
         b.dc_gpio = 23;
         assert!(a.rewired(&b));
+    }
+
+    #[test]
+    fn the_meters_are_off_unless_switched_on_and_lie_under_the_track_unless_placed() {
+        let on = Store::parse(r#"{ "meters": { "type": "boolean", "value": true } }"#).unwrap();
+        assert_eq!(from_store(&on).0.meters, Some(Place::Under));
+
+        let placed_but_off = Store::parse(
+            r#"{ "meters": { "type": "boolean", "value": false },
+                 "meters_style": { "type": "string", "value": "vertical_left" } }"#,
+        )
+        .unwrap();
+        assert_eq!(from_store(&placed_but_off).0.meters, None);
+
+        let odd = Store::parse(
+            r#"{ "meters": { "type": "boolean", "value": true },
+                 "meters_style": { "type": "string", "value": "diagonal" } }"#,
+        )
+        .unwrap();
+        let (c, problems) = from_store(&odd);
+        assert_eq!(
+            c.meters,
+            Some(Place::Under),
+            "a place not known leaves the first"
+        );
+        assert!(problems.iter().any(|p| p.starts_with("meters_style:")));
     }
 }

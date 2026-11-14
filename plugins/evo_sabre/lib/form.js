@@ -10,8 +10,8 @@ const NUMBERS = {
     sleep_after: [0, 86400],
     deep_sleep_after: [0, 86400]
 };
-const SWITCHES = ['oled_active', 'remote_active', 'click_prevention'];
-const SELECTS = { clock_segments: ['off', 'very_faint', 'faint', 'dim'], log_level: ['error', 'info', 'debug'] };
+const SWITCHES = ['oled_active', 'remote_active', 'click_prevention', 'meters'];
+const SELECTS = { meters_style: ['horizontal', 'vertical_left', 'vertical_right'], clock_segments: ['off', 'very_faint', 'faint', 'dim'], log_level: ['error', 'info', 'debug'] };
 
 // A switch as the store may hold it: a boolean, or its text.
 function isOn(value, fallback) {

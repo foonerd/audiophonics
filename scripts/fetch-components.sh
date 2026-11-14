@@ -10,7 +10,11 @@
 #   scripts/fetch-components.sh              every component
 #   scripts/fetch-components.sh keepalive    the ones named
 #
-# Needs curl, openssl and unzip.
+# A lock names the release's archive where it is not <name>-<version>.zip
+# (ARCHIVE), as a release with an archive per architecture does; a .tar.gz
+# is unpacked as well as a .zip.
+#
+# Needs curl, openssl, unzip and tar.
 set -euo pipefail
 ROOT=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
@@ -42,7 +46,7 @@ fi
 for component in "${components[@]}"; do
   lock="components/$component.lock"
   [ -f "$lock" ] || { echo "fetch-components: no $lock" >&2; exit 1; }
-  NAME='' VERSION='' REPOSITORY=''
+  NAME='' VERSION='' REPOSITORY='' ARCHIVE=''
   . "$lock"
   dir="target/components/$component"
   if [ -f "$dir/verified-$VERSION" ]; then
@@ -52,7 +56,7 @@ for component in "${components[@]}"; do
 
   rm -rf "$dir"
   mkdir -p "$dir/download" "$dir/files"
-  archive="$NAME-$VERSION.zip"
+  archive="${ARCHIVE:-$NAME-$VERSION.zip}"
   base="https://github.com/$REPOSITORY/releases/download/v$VERSION"
   for asset in "$archive" SHA256SUMS SHA256SUMS.sig; do
     fetch "$base/$asset" "$dir/download/$asset"
@@ -65,7 +69,11 @@ for component in "${components[@]}"; do
   grep -q " [.*/]*$archive\$" "$dir/download/SHA256SUMS" \
     || { echo "fetch-components: $component $VERSION: SHA256SUMS does not name $archive" >&2; exit 1; }
 
-  unzip -q "$dir/download/$archive" -d "$dir/files"
+  case "$archive" in
+    *.zip) unzip -q "$dir/download/$archive" -d "$dir/files" ;;
+    *.tar.gz) tar -xzf "$dir/download/$archive" -C "$dir/files" --no-same-owner ;;
+    *) echo "fetch-components: $component $VERSION: $archive is neither a .zip nor a .tar.gz" >&2; exit 1 ;;
+  esac
   signed "$dir/files/MANIFEST" "$dir/files/MANIFEST.sig" \
     || { echo "fetch-components: $component $VERSION: the archive's MANIFEST is not signed with the release key" >&2; exit 1; }
   ( cd "$dir/files" && sha256sum --check --quiet MANIFEST ) \

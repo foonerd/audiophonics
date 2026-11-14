@@ -1,0 +1,13 @@
+# evotap: the audio tap of the evo framework. An ALSA plugin the player's
+# stream passes through byte for byte, measured on the way for the meters.
+# Shipped from its own release and verified against the evo release key
+# (keys/release-signing.pub) before anything of it is packed.
+NAME=evotap
+VERSION=0.1.1
+REPOSITORY=foonerd/evotap
+# The release has an archive per architecture; arm is the 32-bit build for
+# the userland Volumio runs on every Raspberry Pi.
+ARCHIVE="evotap-$VERSION-arm.tar.gz"
+# What a plugin takes from it: the file there, where it goes in the plugin,
+# and its mode.
+FILES="evotap-$VERSION-arm/lib/libevotap.so:evotap/libevotap.so:644 evotap-$VERSION-arm/LICENSE:evotap/LICENSE:644"

@@ -2,6 +2,13 @@
 
 All notable changes to the Audiophonics Evo Sabre plugin are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.99.6] - 2026-11-14
+
+- **Level meters**, a switch, off until you switch it on: two meters beside the track, one a channel, on a scale of sixty decibels. Each shows the level, the reach of the peak, and a mark that holds the highest peak for a moment. They move twenty-five times a second.
+- **Meters: where they stand.** Lying under the track, the left channel above the right, where the artist and the album share a line to make room; or upright at the left or the right of the track, which keeps its three lines.
+- The meters read evotap, a tap in the player's audio path that every stream passes through unchanged. It is in the path only while the meters are on, and joins it after a restart of the player on a plugin just installed or updated.
+- The clock's unlit segments are Very faint unless set otherwise.
+
 ## [2.99.5] - 2026-11-14
 
 - **Clock digits: unlit segments** gains Very faint, between Dark and Faint. The display now has two greys under its ordinary scale, one and two ticks of its clock where the ordinary scale starts at eight.

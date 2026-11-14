@@ -29,6 +29,8 @@ mod grey;
 mod icons;
 mod keys;
 mod layout;
+mod levels;
+mod meters;
 mod orbit;
 mod render;
 mod scroll;
@@ -61,17 +63,23 @@ const NAME: &str = "evosabre-panel";
 const USAGE: &str = "\
 usage: evosabre-panel [--config FILE]
        evosabre-panel --render DIR [--assets DIR]
+       evosabre-panel --levels
        evosabre-panel --version
 
   --config FILE  the plugin's settings, as Volumio's configuration store
                  keeps them; without it, the installed plugin's own
   --render DIR   draw every screen into DIR as PGM images, and leave
   --assets DIR   with --render: the logo and the Unifont file to draw with
+  --levels       say for ten seconds what the level meters read from the
+                 tap in the player's audio path, and leave
   --version      say which build this is";
 
 /// Redraw rate while a line scrolls: one pixel per frame at the marquee's
 /// speed.
 const SCROLL_FRAME: Duration = Duration::from_millis(1000 / scroll::SPEED as u64);
+/// A frame of the meters: twenty-five a second, from the start of one to
+/// the start of the next.
+const METER_FRAME: Duration = Duration::from_millis(40);
 /// How often the address is looked up again, in polls.
 const ADDRESS_EVERY: u32 = 10;
 /// How often the time zone is read again, in polls: it may be changed while
@@ -93,6 +101,7 @@ enum Msg {
 enum Command {
     Run { config: String },
     Render { dir: String, assets: Option<String> },
+    Levels,
     Version,
     Help,
 }
@@ -111,6 +120,7 @@ fn parse(args: &[String]) -> Result<Command, String> {
         match arg.as_str() {
             "--version" | "-V" => return Ok(Command::Version),
             "--help" | "-h" => return Ok(Command::Help),
+            "--levels" => return Ok(Command::Levels),
             "--config" => config = value("a file")?,
             "--render" => render = Some(value("a directory")?),
             "--assets" => assets = Some(value("a directory")?),
@@ -137,6 +147,7 @@ fn main() -> ExitCode {
             Ok(())
         }
         Ok(Command::Render { dir, assets }) => render_all(&dir, assets.as_deref()),
+        Ok(Command::Levels) => say_levels(),
         Ok(Command::Run { config }) => run(&config),
         Err(e) => {
             eprintln!("{NAME}: {e}\n{USAGE}");
@@ -149,6 +160,57 @@ fn main() -> ExitCode {
             eprintln!("{NAME}: {e}");
             ExitCode::FAILURE
         }
+    }
+}
+
+/// What the meters would show, said four times a second for ten seconds:
+/// the tap's ring as the display reads it, for a look without the glass.
+fn say_levels() -> Result<(), String> {
+    let mut source = levels::Source::new();
+    let mut needles = meters::Meters::default();
+    let started = Instant::now();
+    let mut said = started;
+    let mut heard_any = false;
+    while started.elapsed() < Duration::from_secs(10) {
+        let now = Instant::now();
+        let heard = source.take(now);
+        heard_any |= heard.is_some();
+        needles.feed(heard, now);
+        match source.changed() {
+            Some(true) => println!(
+                "reading {}",
+                source
+                    .path()
+                    .map_or_else(String::new, |p| p.display().to_string())
+            ),
+            Some(false) => println!("no stream to read"),
+            None => {}
+        }
+        if now.saturating_duration_since(said) >= Duration::from_millis(250) {
+            said = now;
+            let [left, right] = needles.bars();
+            let db = |place: f32| meters::FLOOR_DB * (1.0 - place);
+            println!(
+                "left level {:6.1} dB peak {:6.1} dB hold {:6.1} dB   right level {:6.1} dB peak {:6.1} dB hold {:6.1} dB",
+                db(left.level),
+                db(left.peak),
+                db(left.hold),
+                db(right.level),
+                db(right.peak),
+                db(right.hold)
+            );
+        }
+        std::thread::sleep(METER_FRAME);
+    }
+    if heard_any {
+        Ok(())
+    } else {
+        Err(format!(
+            "nothing was published under {} for the tag {} in ten seconds: \
+             nothing is playing, or the tap is not in the player's audio path",
+            tap::ring::DIR,
+            levels::TAG
+        ))
     }
 }
 
@@ -367,6 +429,10 @@ fn run(path: &str) -> Result<(), String> {
     let mut probe = Probe::default();
     let mut screen = layout::Playing::default();
     let mut selector = layout::Selector::default();
+    let mut source = levels::Source::new();
+    let mut needles = meters::Meters::default();
+    let mut metering = false;
+    let mut drawn_at = Instant::now();
     let mut font = Unifont::new(&cfg.unifont_path);
     let (mut clock, warning) = Clock::new();
     if let Some(w) = warning {
@@ -532,9 +598,36 @@ fn run(path: &str) -> Result<(), String> {
                 layout::Screen::Playing => None,
                 layout::Screen::Clock => clock.now(),
             };
+            drawn_at = now;
             match &time {
-                Some(t) => layout::clock(&mut frame, &state, &ip, t, cfg.clock_segments.level()),
-                None => screen.render(&mut frame, &state, &ip, now, &mut font),
+                Some(t) => {
+                    layout::clock(&mut frame, &state, &ip, t, cfg.clock_segments.level());
+                    metering = false;
+                }
+                None if cfg.meters.is_some() => {
+                    let place = cfg.meters.unwrap_or(layout::Place::Under);
+                    needles.feed(source.take(now), now);
+                    match source.changed() {
+                        Some(true) => info!(
+                            "meters: reading {}",
+                            source
+                                .path()
+                                .map_or_else(String::new, |p| p.display().to_string())
+                        ),
+                        Some(false) => info!("meters: no stream to read"),
+                        None => {}
+                    }
+                    let bars = needles.bars();
+                    let meters = layout::Metered { bars: &bars, place };
+                    screen.render(&mut frame, &state, &ip, now, &mut font, Some(meters));
+                    // Fast frames while there is sound to show, and until
+                    // the marks have fallen after it.
+                    metering = state.is_playing() || !needles.at_rest();
+                }
+                None => {
+                    screen.render(&mut frame, &state, &ip, now, &mut font, None);
+                    metering = false;
+                }
             }
             moving = time.is_none() && screen.scrolling();
             if let Some(problem) = font.take_problem() {
@@ -551,6 +644,9 @@ fn run(path: &str) -> Result<(), String> {
         let mut wait = next_poll.saturating_duration_since(Instant::now());
         if moving && !greeting_up && level != Level::Blank {
             wait = wait.min(SCROLL_FRAME);
+        }
+        if metering && !greeting_up && level != Level::Blank {
+            wait = wait.min(METER_FRAME.saturating_sub(drawn_at.elapsed()));
         }
         match rx.recv_timeout(wait) {
             Ok(first) => {
@@ -617,6 +713,7 @@ mod tests {
     fn the_other_commands_and_a_wrong_one() {
         assert_eq!(parse(&args(&["--version"])), Ok(Command::Version));
         assert_eq!(parse(&args(&["--help"])), Ok(Command::Help));
+        assert_eq!(parse(&args(&["--levels"])), Ok(Command::Levels));
         assert_eq!(
             parse(&args(&["--render", "out", "--assets", "a"])),
             Ok(Command::Render {

@@ -35,6 +35,8 @@ Installing over version 2 of the plugin replaces it and starts the new display a
 | --- | --- |
 | Display on | Off stops the display's program: the display stays dark and the transport keys are not read. |
 | Brightness | 1 to 255. |
+| Level meters | Two meters beside the track, one a channel. Off unless you switch them on. |
+| Meters: where they stand | Lying under the track, or upright at its left or its right. |
 | Clock after | Seconds of rest before the clock replaces the track. 0 keeps the track. |
 | Clock digits: unlit segments | The segments of the clock's digits that are not lit: Dark, Very faint, Faint or Dim. The first two greys are fainter than any other on the display. |
 | Dim after | Seconds after the last key on the remote, or after playback started, before the display dims. 0 never dims. |
@@ -45,6 +47,14 @@ Installing over version 2 of the plugin replaces it and starts the new display a
 | Detail | How much the display's program writes to the journal. |
 
 Settings take effect when saved.
+
+## Level meters
+
+Switch *Level meters* on and two meters stand beside the track, one a channel, on a scale of sixty decibels. The bright part of a meter is the level, averaged as a VU meter averages; the dimmer part reaches to the peak; a mark holds the highest peak for a moment before it falls. The marks between the two meters stand at 50, 40, 30, 20, 10, 6 and 3 decibels under full scale, and at full scale.
+
+*Meters: where they stand* places them. Lying under the track, the left channel is above the right and the scale runs from left to right; the artist and the album share the line under the title to make room. Upright at the left or the right of the track, the left channel comes first and the scale runs from the bottom up; the track keeps its three lines, each a little shorter.
+
+The meters read evotap, a tap in the player's audio path. Every stream passes through it unchanged, PCM, DoP and native DSD alike, and it measures the stream ahead of the player's volume, so the meters show the music and not the volume it is played at. After the plugin is installed or updated the tap joins the audio path once the player has restarted; the plugin asks when that is needed. With the meters off, the tap is not in the path.
 
 ## Click prevention
 
@@ -84,7 +94,7 @@ It says which board it found, how it opened the display, what the player is doin
 
 ## What it installs
 
-Outside its own folder, the plugin installs two systemd units (`evosabre-panel.service` for the display, `evosabre-keepalive.service` for Click prevention), udev rules for the receiver's decoder and its device, a sudoers entry for switching the two services, and a marked block of two lines in `/boot/userconfig.txt`. Uninstalling removes them all. Installing also removes version 2's three services and releases the display's two GPIO lines where version 2 left them taken.
+In the player's audio path the plugin puts only what its settings ask for: the tap for the level meters, and the program behind Click prevention. Outside its own folder, the plugin installs two systemd units (`evosabre-panel.service` for the display, `evosabre-keepalive.service` for Click prevention), udev rules for the receiver's decoder and its device, a sudoers entry for switching the two services, and a marked block of two lines in `/boot/userconfig.txt`. Uninstalling removes them all. Installing also removes version 2's three services and releases the display's two GPIO lines where version 2 left them taken.
 
 ## Credits
 
@@ -98,4 +108,4 @@ The plugin is free and open source, maintained by one developer in his own time.
 
 ## Licence
 
-MIT. Two things shipped with the plugin are separate works under their own licences: GNU Unifont, as `assets/unifont.hex` (see `assets/UNIFONT.txt`), and Audio Keepalive, the program behind Click prevention, under the GNU General Public License (see `keepalive/NOTICE.txt`).
+MIT. Three things shipped with the plugin are separate works under their own licences: GNU Unifont, as `assets/unifont.hex` (see `assets/UNIFONT.txt`); Audio Keepalive, the program behind Click prevention, under the GNU General Public License (see `keepalive/NOTICE.txt`); and evotap, the tap the level meters read, under the MIT licence (see `evotap/NOTICE.txt`).

@@ -5,9 +5,10 @@
 //! anything. Grey levels carry the hierarchy: the title brightest, then the
 //! artist, then the album, with the chrome quieter than any of them.
 
-use crate::frame::Frame;
+use crate::frame::{self, Frame};
 use crate::grey;
 use crate::icons;
+use crate::meters::{self, Bar};
 use crate::scroll::Marquee;
 use crate::segments;
 use crate::text::{self, Face};
@@ -27,6 +28,13 @@ pub const QUIET: u8 = grey::linear(6);
 pub const HAIRLINE: u8 = grey::linear(5);
 pub const BAR_TRACK: u8 = grey::linear(3);
 pub const BAR_FILL: u8 = grey::linear(12);
+/// A meter: its level, the reach of its peak beyond that, and the rest of
+/// its length, which is there without drawing the eye.
+pub const METER_LEVEL: u8 = grey::linear(10);
+pub const METER_PEAK: u8 = grey::linear(4);
+pub const METER_REST: u8 = grey::TRACE;
+pub const METER_HOLD: u8 = grey::FULL;
+pub const METER_MARK: u8 = grey::linear(5);
 
 /// The picture's width: one less than the panel, as is its height, so the
 /// orbit has a spare column and row.
@@ -43,6 +51,42 @@ const ARTIST_Y: i32 = 31;
 const ALBUM_Y: i32 = 45;
 const TIME_Y: i32 = 55;
 const BAR_Y: u32 = 58;
+/// The meters take the album's rows: the left channel, a row of marks, the
+/// right channel.
+const METER_ROWS: u32 = 4;
+const METER_LEFT_Y: u32 = 45;
+const METER_MARKS_Y: u32 = METER_LEFT_Y + METER_ROWS;
+const METER_RIGHT_Y: u32 = METER_MARKS_Y + 1;
+/// Where the marks stand, in decibels under full scale.
+const METER_MARKS_DB: [f32; 8] = [-50.0, -40.0, -30.0, -20.0, -10.0, -6.0, -3.0, 0.0];
+/// Upright, the meters stand from under the hairline to the bottom row but
+/// one: the left channel, two columns of marks, the right channel.
+const COLUMN_W: u32 = 5;
+const COLUMN_MARKS_W: u32 = 2;
+const COLUMN_TOP: u32 = HAIRLINE_Y + 2;
+const COLUMN_BOTTOM: u32 = 62;
+/// The width the upright meters take, and that with the gap between them
+/// and the lines beside them.
+const STRIP_BARS: u32 = 2 * COLUMN_W + COLUMN_MARKS_W;
+const STRIP: u32 = STRIP_BARS + 3;
+
+/// Where the meters stand.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Place {
+    /// Lying under the track, left channel over right.
+    Under,
+    /// Upright at the left of the track.
+    Left,
+    /// Upright at the right of the track.
+    Right,
+}
+
+/// The meters to draw: their marks and where they stand.
+#[derive(Debug, Clone, Copy)]
+pub struct Metered<'a> {
+    pub bars: &'a [Bar; 2],
+    pub place: Place,
+}
 
 /// A line in one of the panel's own faces, where it stands.
 fn mono(f: &mut Frame, x: i32, y: i32, s: &str, font: &'static MonoFont<'static>, luma: u8) {
@@ -124,8 +168,9 @@ fn chrome(f: &mut Frame, s: &State, ip: &str, with_format: bool) {
     }
 }
 
-/// Elapsed at the left, length at the right, the bar between them.
-fn time_row(f: &mut Frame, s: &State) {
+/// Elapsed at the left, length at the right of `width` columns, the bar
+/// between them.
+fn time_row(f: &mut Frame, s: &State, width: u32) {
     let (Some(seek), Some(duration)) = (s.seek, s.duration) else {
         return;
     };
@@ -138,10 +183,10 @@ fn time_row(f: &mut Frame, s: &State) {
     let ew = elapsed.chars().count() as u32 * cw;
     let lw = length.chars().count() as u32 * cw;
     mono(f, 1, TIME_Y, &elapsed, TIME_FONT, ALBUM);
-    mono(f, (W - lw) as i32, TIME_Y, &length, TIME_FONT, ALBUM);
+    mono(f, (width - lw) as i32, TIME_Y, &length, TIME_FONT, ALBUM);
 
     let x0 = 1 + ew + 6;
-    let x1 = W - lw - 6;
+    let x1 = (width - lw).saturating_sub(6);
     if x1 <= x0 {
         return;
     }
@@ -150,6 +195,93 @@ fn time_row(f: &mut Frame, s: &State) {
         let l = if px < fill { BAR_FILL } else { BAR_TRACK };
         f.set(px, BAR_Y, l);
         f.set(px, BAR_Y + 1, l);
+    }
+}
+
+/// The column of a place along a meter: the floor at the left edge, full
+/// scale at the right.
+fn meter_x(place: f32) -> u32 {
+    (place.clamp(0.0, 1.0) * (W - 1) as f32).round() as u32
+}
+
+/// One channel: bright as far as its level, dimmer as far as its peak, the
+/// faintest grey for the rest, and the hold as a mark two columns wide.
+fn meter(f: &mut Frame, y: u32, bar: &Bar) {
+    let level = meter_x(bar.level);
+    let peak = meter_x(bar.peak).max(level);
+    for x in 0..W {
+        let luma = if x < level {
+            METER_LEVEL
+        } else if x < peak {
+            METER_PEAK
+        } else {
+            METER_REST
+        };
+        for row in 0..METER_ROWS {
+            f.set(x, y + row, luma);
+        }
+    }
+    if bar.hold > 0.0 {
+        let hold = meter_x(bar.hold).max(1);
+        for x in hold - 1..=hold {
+            for row in 0..METER_ROWS {
+                f.set(x, y + row, METER_HOLD);
+            }
+        }
+    }
+}
+
+/// The two channels, left over right, with the scale's marks between them.
+fn meter_pair(f: &mut Frame, bars: &[Bar; 2]) {
+    meter(f, METER_LEFT_Y, &bars[0]);
+    meter(f, METER_RIGHT_Y, &bars[1]);
+    for db in METER_MARKS_DB {
+        f.set(meter_x(meters::place(db)), METER_MARKS_Y, METER_MARK);
+    }
+}
+
+/// How many rows above the bottom a place along an upright meter is.
+fn meter_rows(place: f32) -> u32 {
+    (place.clamp(0.0, 1.0) * (COLUMN_BOTTOM - COLUMN_TOP) as f32).round() as u32
+}
+
+/// One channel upright, the floor at the bottom: the same greys as lying
+/// down, and the hold as a mark two rows high.
+fn meter_column(f: &mut Frame, x: u32, bar: &Bar) {
+    let level = meter_rows(bar.level);
+    let peak = meter_rows(bar.peak).max(level);
+    for up in 0..=COLUMN_BOTTOM - COLUMN_TOP {
+        let luma = if up < level {
+            METER_LEVEL
+        } else if up < peak {
+            METER_PEAK
+        } else {
+            METER_REST
+        };
+        for column in 0..COLUMN_W {
+            f.set(x + column, COLUMN_BOTTOM - up, luma);
+        }
+    }
+    if bar.hold > 0.0 {
+        let hold = meter_rows(bar.hold).max(1);
+        for up in hold - 1..=hold {
+            for column in 0..COLUMN_W {
+                f.set(x + column, COLUMN_BOTTOM - up, METER_HOLD);
+            }
+        }
+    }
+}
+
+/// The two channels upright from column `x`, left beside right, with the
+/// scale's marks between them.
+fn meter_columns(f: &mut Frame, x: u32, bars: &[Bar; 2]) {
+    meter_column(f, x, &bars[0]);
+    meter_column(f, x + COLUMN_W + COLUMN_MARKS_W, &bars[1]);
+    for db in METER_MARKS_DB {
+        let y = COLUMN_BOTTOM - meter_rows(meters::place(db));
+        for column in 0..COLUMN_MARKS_W {
+            f.set(x + COLUMN_W + column, y, METER_MARK);
+        }
     }
 }
 
@@ -189,12 +321,66 @@ pub struct Playing {
 }
 
 impl Playing {
-    pub fn render(&mut self, f: &mut Frame, s: &State, ip: &str, now: Instant, font: &mut Unifont) {
+    /// The track, and the level meters where they are asked for: under the
+    /// track, where the artist and the album share a line to make room, or
+    /// upright at one side, where every line is that much shorter.
+    pub fn render(
+        &mut self,
+        f: &mut Frame,
+        s: &State,
+        ip: &str,
+        now: Instant,
+        font: &mut Unifont,
+        meters: Option<Metered>,
+    ) {
         chrome(f, s, ip, true);
+        match meters {
+            None => self.lines(f, s, now, font, W, false),
+            Some(Metered {
+                bars,
+                place: Place::Under,
+            }) => {
+                self.lines(f, s, now, font, W, true);
+                meter_pair(f, bars);
+            }
+            Some(Metered { bars, place }) => {
+                // The lines are drawn narrower and set down beside the
+                // meters.
+                let width = W - STRIP;
+                let mut body = Frame::new();
+                self.lines(&mut body, s, now, font, width, false);
+                let (text_x, meters_x) = match place {
+                    Place::Left => (STRIP, 0),
+                    _ => (0, W - STRIP_BARS),
+                };
+                for y in HAIRLINE_Y + 1..frame::HEIGHT {
+                    for x in 0..width {
+                        let luma = body.get(x, y);
+                        if luma != 0 {
+                            f.set(text_x + x, y, luma);
+                        }
+                    }
+                }
+                meter_columns(f, meters_x, bars);
+            }
+        }
+    }
 
+    /// The title, the artist and the album, and the time row, within
+    /// `width` columns from the left edge. With `together` the artist and
+    /// the album share one line and the album's rows are left free.
+    fn lines(
+        &mut self,
+        f: &mut Frame,
+        s: &State,
+        now: Instant,
+        font: &mut Unifont,
+        width: u32,
+        together: bool,
+    ) {
         let (title, luma) = title_or_status(s);
         let face = Face::choose(&title, &FONT_9X18_BOLD, font);
-        self.title.set(&title, face.width(&title, font), W, now);
+        self.title.set(&title, face.width(&title, font), width, now);
         let drop = (TITLE_ROWS - face.height()) as i32 / 2;
         face.draw(
             f,
@@ -203,14 +389,15 @@ impl Playing {
             TITLE_Y + drop,
             luma,
             self.title.offset(now),
-            W,
+            width,
         );
 
         let artist = text::tidy(&s.artist);
         let album = text::tidy(&s.album);
-        if text::latin(&artist) && text::latin(&album) {
+        if !together && text::latin(&artist) && text::latin(&album) {
             let face = Face::Mono(&FONT_7X13);
-            self.second.set(&artist, face.width(&artist, font), W, now);
+            self.second
+                .set(&artist, face.width(&artist, font), width, now);
             face.draw(
                 f,
                 font,
@@ -218,17 +405,26 @@ impl Playing {
                 ARTIST_Y,
                 ARTIST,
                 self.second.offset(now),
-                W,
+                width,
             );
-            let album_chars = (W / FONT_6X10.character_size.width) as usize;
-            mono(f, 0, ALBUM_Y, &cut(&album, album_chars), &FONT_6X10, ALBUM);
+            let album_chars = (width / FONT_6X10.character_size.width) as usize;
+            let album = cut(&album, album_chars);
+            Face::Mono(&FONT_6X10).draw(f, font, &album, ALBUM_Y, ALBUM, 0, width);
         } else {
             let both = joined(&artist, &album);
             let face = Face::choose(&both, &FONT_7X13, font);
-            self.second.set(&both, face.width(&both, font), W, now);
-            face.draw(f, font, &both, ARTIST_Y, ARTIST, self.second.offset(now), W);
+            self.second.set(&both, face.width(&both, font), width, now);
+            face.draw(
+                f,
+                font,
+                &both,
+                ARTIST_Y,
+                ARTIST,
+                self.second.offset(now),
+                width,
+            );
         }
-        time_row(f, s);
+        time_row(f, s, width);
     }
 
     /// True while a line is moving, so the caller redraws at the marquee's
@@ -320,7 +516,7 @@ pub mod tests {
     fn render(s: &State, ip: &str) -> Frame {
         let mut f = Frame::new();
         let mut none = Unifont::new("/nonexistent/unifont.hex");
-        Playing::default().render(&mut f, s, ip, Instant::now(), &mut none);
+        Playing::default().render(&mut f, s, ip, Instant::now(), &mut none, None);
         f
     }
 
@@ -496,7 +692,7 @@ pub mod tests {
         let mut none = Unifont::new("/nonexistent/unifont.hex");
         let t0 = Instant::now();
         let mut a = Frame::new();
-        p.render(&mut a, &s, "10.0.0.1", t0, &mut none);
+        p.render(&mut a, &s, "10.0.0.1", t0, &mut none, None);
         assert!(p.scrolling());
         let mut b = Frame::new();
         p.render(
@@ -505,6 +701,7 @@ pub mod tests {
             "10.0.0.1",
             t0 + Duration::from_millis(3000),
             &mut none,
+            None,
         );
         assert_ne!(a, b, "the title has moved");
     }
@@ -516,7 +713,7 @@ pub mod tests {
         let mut s = dire_straits();
         s.title = "\u{4E2D}\u{4E2D}".into();
         let mut f = Frame::new();
-        Playing::default().render(&mut f, &s, "10.0.0.1", Instant::now(), &mut font);
+        Playing::default().render(&mut f, &s, "10.0.0.1", Instant::now(), &mut font, None);
         // The sample glyph's full row is its fourth; the title sits one
         // row down in its eighteen.
         let row = (TITLE_Y + 1 + 3) as u32;
@@ -537,7 +734,7 @@ pub mod tests {
         s.artist = "\u{4E2D}".into();
         s.album = "A".into();
         let mut f = Frame::new();
-        Playing::default().render(&mut f, &s, "10.0.0.1", Instant::now(), &mut font);
+        Playing::default().render(&mut f, &s, "10.0.0.1", Instant::now(), &mut font, None);
         let row = (ARTIST_Y + 3) as u32;
         assert!((0..15).all(|x| f.get(x, row) == ARTIST), "the artist, wide");
         assert!(
@@ -562,5 +759,200 @@ pub mod tests {
         let mut curly = dire_straits();
         curly.title = "Don\u{2019}t".into();
         assert_eq!(title_or_status(&curly), ("Don't".to_string(), TITLE));
+    }
+
+    fn bars(level: f32, peak: f32, hold: f32) -> [Bar; 2] {
+        [
+            Bar { level, peak, hold },
+            Bar {
+                level: 0.0,
+                peak: 0.0,
+                hold: 0.0,
+            },
+        ]
+    }
+
+    #[test]
+    fn a_meter_is_bright_to_its_level_dimmer_to_its_peak_and_marks_its_hold() {
+        let mut f = Frame::new();
+        meter_pair(&mut f, &bars(0.25, 0.5, 0.75));
+        let y = METER_LEFT_Y;
+        let (level, peak, hold) = (meter_x(0.25), meter_x(0.5), meter_x(0.75));
+        for row in 0..METER_ROWS {
+            assert_eq!(f.get(0, y + row), METER_LEVEL);
+            assert_eq!(f.get(level - 1, y + row), METER_LEVEL);
+            assert_eq!(f.get(level, y + row), METER_PEAK);
+            assert_eq!(f.get(peak - 1, y + row), METER_PEAK);
+            assert_eq!(f.get(peak, y + row), METER_REST);
+            assert_eq!(f.get(hold - 1, y + row), METER_HOLD);
+            assert_eq!(f.get(hold, y + row), METER_HOLD);
+            assert_eq!(f.get(hold + 1, y + row), METER_REST);
+            assert_eq!(f.get(W - 1, y + row), METER_REST);
+        }
+        // The silent channel is its faintest grey from end to end.
+        assert!((0..W).all(|x| f.get(x, METER_RIGHT_Y) == METER_REST));
+        // The marks stand between the two, the last at full scale.
+        assert_eq!(f.get(W - 1, METER_MARKS_Y), METER_MARK);
+        assert_eq!(
+            f.get(meter_x(meters::place(-20.0)), METER_MARKS_Y),
+            METER_MARK
+        );
+        assert_eq!(f.get(0, METER_MARKS_Y), 0);
+    }
+
+    #[test]
+    fn a_peak_at_full_scale_holds_at_the_right_edge_and_stays_in_the_picture() {
+        let mut f = Frame::new();
+        meter_pair(&mut f, &bars(1.0, 1.0, 1.0));
+        assert_eq!(f.get(W - 1, METER_LEFT_Y), METER_HOLD);
+        assert_eq!(f.get(W - 3, METER_LEFT_Y), METER_LEVEL);
+        assert!(
+            (0..frame::HEIGHT).all(|y| f.get(255, y) == 0),
+            "column 255 lit"
+        );
+    }
+
+    #[test]
+    fn with_meters_the_artist_and_album_share_a_line_and_the_time_row_stays() {
+        let s = State {
+            status: "play".into(),
+            title: "So Far Away".into(),
+            artist: "Dire Straits".into(),
+            album: "Brothers in Arms".into(),
+            seek: Some(63_000),
+            duration: Some(312),
+            volume: Some(45),
+            ..State::default()
+        };
+        let mut none = Unifont::new("/nonexistent/unifont.hex");
+        let now = Instant::now();
+        let mut plain = Frame::new();
+        Playing::default().render(&mut plain, &s, "10.0.0.1", now, &mut none, None);
+        let mut metered = Frame::new();
+        let b = bars(0.5, 0.6, 0.7);
+        let under = Metered {
+            bars: &b,
+            place: Place::Under,
+        };
+        Playing::default().render(&mut metered, &s, "10.0.0.1", now, &mut none, Some(under));
+
+        // Above the second line and from the time row down, the same picture.
+        for y in (0..ARTIST_Y as u32).chain(TIME_Y as u32..frame::HEIGHT) {
+            for x in 0..frame::WIDTH {
+                assert_eq!(plain.get(x, y), metered.get(x, y), "({x}, {y})");
+            }
+        }
+        // The second line carries more than the artist: the album is on it.
+        let lit = |f: &Frame| {
+            (0..W)
+                .filter(|&x| (ARTIST_Y as u32..METER_LEFT_Y).any(|y| f.get(x, y) != 0))
+                .count()
+        };
+        assert!(lit(&metered) > lit(&plain));
+        assert_eq!(metered.get(0, METER_LEFT_Y), METER_LEVEL);
+        // The meters end a row above the time row.
+        assert!(METER_RIGHT_Y + METER_ROWS <= TIME_Y as u32);
+    }
+
+    fn metered_state() -> State {
+        State {
+            status: "play".into(),
+            title: "So Far Away".into(),
+            artist: "Dire Straits".into(),
+            album: "Brothers in Arms".into(),
+            seek: Some(63_000),
+            duration: Some(312),
+            volume: Some(45),
+            ..State::default()
+        }
+    }
+
+    #[test]
+    fn an_upright_meter_rises_from_the_bottom_and_marks_its_hold() {
+        let mut f = Frame::new();
+        meter_columns(&mut f, 0, &bars(0.25, 0.5, 0.75));
+        let (level, peak, hold) = (meter_rows(0.25), meter_rows(0.5), meter_rows(0.75));
+        for x in 0..COLUMN_W {
+            assert_eq!(f.get(x, COLUMN_BOTTOM), METER_LEVEL);
+            assert_eq!(f.get(x, COLUMN_BOTTOM - (level - 1)), METER_LEVEL);
+            assert_eq!(f.get(x, COLUMN_BOTTOM - level), METER_PEAK);
+            assert_eq!(f.get(x, COLUMN_BOTTOM - peak), METER_REST);
+            assert_eq!(f.get(x, COLUMN_BOTTOM - hold), METER_HOLD);
+            assert_eq!(f.get(x, COLUMN_BOTTOM - hold + 1), METER_HOLD);
+            assert_eq!(f.get(x, COLUMN_TOP), METER_REST);
+        }
+        // The silent channel beside it, and the marks between the two.
+        let right = COLUMN_W + COLUMN_MARKS_W;
+        assert!((COLUMN_TOP..=COLUMN_BOTTOM).all(|y| f.get(right, y) == METER_REST));
+        assert_eq!(
+            f.get(COLUMN_W, COLUMN_TOP),
+            METER_MARK,
+            "full scale at the top"
+        );
+        assert_eq!(f.get(COLUMN_W + 1, COLUMN_TOP), METER_MARK);
+        // Nothing above the meters' top or under their bottom.
+        assert!((0..STRIP_BARS).all(|x| f.get(x, COLUMN_TOP - 1) == 0 && f.get(x, 63) == 0));
+    }
+
+    #[test]
+    fn upright_meters_stand_at_the_side_asked_for_and_the_lines_beside_them() {
+        let s = metered_state();
+        let mut none = Unifont::new("/nonexistent/unifont.hex");
+        let now = Instant::now();
+        let b = bars(0.5, 0.6, 0.7);
+
+        let mut left = Frame::new();
+        let at_left = Metered {
+            bars: &b,
+            place: Place::Left,
+        };
+        Playing::default().render(&mut left, &s, "10.0.0.1", now, &mut none, Some(at_left));
+        assert_eq!(left.get(0, COLUMN_BOTTOM), METER_LEVEL);
+        // A clear gap, then the title starts where the track's would at 0.
+        assert!(
+            (STRIP_BARS..STRIP).all(|x| (COLUMN_TOP..=COLUMN_BOTTOM).all(|y| left.get(x, y) == 0))
+        );
+        let mut plain = Frame::new();
+        Playing::default().render(&mut plain, &s, "10.0.0.1", now, &mut none, None);
+        for y in TITLE_Y as u32..ARTIST_Y as u32 {
+            for x in 0..100 {
+                assert_eq!(left.get(STRIP + x, y), plain.get(x, y), "({x}, {y})");
+            }
+        }
+
+        let mut right = Frame::new();
+        let at_right = Metered {
+            bars: &b,
+            place: Place::Right,
+        };
+        Playing::default().render(&mut right, &s, "10.0.0.1", now, &mut none, Some(at_right));
+        assert_eq!(right.get(W - STRIP_BARS, COLUMN_BOTTOM), METER_LEVEL);
+        assert_eq!(
+            right.get(W - 1, COLUMN_BOTTOM),
+            METER_REST,
+            "the silent channel"
+        );
+        assert!(
+            (0..frame::HEIGHT).all(|y| right.get(255, y) == 0),
+            "column 255 lit"
+        );
+        // The lines are the track's own up to where the meters begin, and
+        // stop short of them.
+        for y in TITLE_Y as u32..ARTIST_Y as u32 {
+            for x in 0..100 {
+                assert_eq!(right.get(x, y), plain.get(x, y), "({x}, {y})");
+            }
+        }
+        assert!((W - STRIP..W - STRIP_BARS)
+            .all(|x| (COLUMN_TOP..=COLUMN_BOTTOM).all(|y| right.get(x, y) == 0)));
+        // All three lines are there: the album has its own row again.
+        assert!((0..100).any(|x| (ALBUM_Y as u32..TIME_Y as u32).any(|y| right.get(x, y) == ALBUM)));
+        // The chrome is the track's from edge to edge.
+        for y in 0..=HAIRLINE_Y {
+            for x in 0..frame::WIDTH {
+                assert_eq!(right.get(x, y), plain.get(x, y));
+                assert_eq!(left.get(x, y), plain.get(x, y));
+            }
+        }
     }
 }

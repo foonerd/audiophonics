@@ -19,6 +19,8 @@
                 "data": [
                     "oled_active",
                     "contrast",
+                    "meters",
+                    "meters_style",
                     "clock_after",
                     "clock_segments",
                     "sleep_after",
@@ -53,6 +55,41 @@
                     ]
                 },
                 {
+                    "id": "meters",
+                    "element": "switch",
+                    "label": "TRANSLATE.EVOSABRE.METERS",
+                    "doc": "TRANSLATE.EVOSABRE.METERS_DOC",
+                    "value": false
+                },
+                {
+                    "id": "meters_style",
+                    "element": "select",
+                    "label": "TRANSLATE.EVOSABRE.METERS_STYLE",
+                    "doc": "TRANSLATE.EVOSABRE.METERS_STYLE_DOC",
+                    "value": {
+                        "value": "horizontal",
+                        "label": "TRANSLATE.EVOSABRE.METERS_HORIZONTAL"
+                    },
+                    "visibleIf": {
+                        "field": "meters",
+                        "value": true
+                    },
+                    "options": [
+                        {
+                            "value": "horizontal",
+                            "label": "TRANSLATE.EVOSABRE.METERS_HORIZONTAL"
+                        },
+                        {
+                            "value": "vertical_left",
+                            "label": "TRANSLATE.EVOSABRE.METERS_VERTICAL_LEFT"
+                        },
+                        {
+                            "value": "vertical_right",
+                            "label": "TRANSLATE.EVOSABRE.METERS_VERTICAL_RIGHT"
+                        }
+                    ]
+                },
+                {
                     "id": "clock_after",
                     "element": "input",
                     "type": "number",
@@ -77,8 +114,8 @@
                     "label": "TRANSLATE.EVOSABRE.CLOCK_SEGMENTS",
                     "doc": "TRANSLATE.EVOSABRE.CLOCK_SEGMENTS_DOC",
                     "value": {
-                        "value": "faint",
-                        "label": "TRANSLATE.EVOSABRE.CLOCK_SEGMENTS_FAINT"
+                        "value": "very_faint",
+                        "label": "TRANSLATE.EVOSABRE.CLOCK_SEGMENTS_VERY_FAINT"
                     },
                     "options": [
                         {

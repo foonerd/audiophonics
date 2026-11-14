@@ -15,13 +15,21 @@
         "type": "number",
         "value": 100
     },
+    "meters": {
+        "type": "boolean",
+        "value": false
+    },
+    "meters_style": {
+        "type": "string",
+        "value": "horizontal"
+    },
     "clock_after": {
         "type": "number",
         "value": 6
     },
     "clock_segments": {
         "type": "string",
-        "value": "faint"
+        "value": "very_faint"
     },
     "sleep_after": {
         "type": "number",

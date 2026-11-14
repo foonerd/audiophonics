@@ -16,6 +16,7 @@ var exec = require('child_process').exec;
 var remote = require('./lib/remote');
 var form = require('./lib/form');
 var keepalive = require('./lib/keepalive');
+var tap = require('./lib/tap');
 var volume = require('./lib/volume');
 
 var SERVICE = 'evosabre-panel.service';
@@ -59,7 +60,7 @@ EvoSabre.prototype.onStart = function () {
     // cannot come up is said on the page, and the settings stay reachable.
     return self.applyService().then(function () {
         self.askRestartIfNeeded();
-        return self.applyClickPrevention();
+        return self.applyAudioPath();
     });
 };
 
@@ -69,7 +70,7 @@ EvoSabre.prototype.onStop = function () {
     if (self.chainTimer) { clearTimeout(self.chainTimer); self.chainTimer = null; }
     return self.systemctl('disable --now')
         .fail(function () { /* said in the log */ })
-        .then(function () { return self.dropClickPrevention(); });
+        .then(function () { return self.leaveAudioPath(); });
 };
 
 EvoSabre.prototype.onRestart = function () { };
@@ -241,70 +242,99 @@ EvoSabre.prototype.restoreVolume = function (was) {
     });
 };
 
-// Out of the chain: the daemon stopped, the contribution gone, the
-// configuration written without it.
-EvoSabre.prototype.dropClickPrevention = function () {
+// One contribution's file as it should stand: written with `text`, or gone
+// when there is none.
+EvoSabre.prototype.contribute = function (name, text) {
+    var file = path.join(ASOUND_DIR, name);
+    if (text === null) {
+        if (fs.existsSync(file)) { fs.unlinkSync(file); }
+        return;
+    }
+    fs.ensureDirSync(ASOUND_DIR);
+    fs.writeFileSync(file, text, 'utf8');
+};
+
+// What the settings ask of the player's audio path: the keeper behind
+// Click prevention, and the tap the meters read. Where the Audio Keepalive
+// plugin already holds the output open, no second keeper is put behind it.
+EvoSabre.prototype.audioPathWanted = function () {
+    var keeper = form.isOn(this.config.get('click_prevention'), false);
+    var standalone = keeper && keepalive.standaloneOn();
+    return {
+        keeper: keeper && !standalone,
+        standalone: standalone,
+        tap: form.isOn(this.config.get('meters'), false)
+    };
+};
+
+// The audio path as the settings stand. The keeper's daemon is stopped
+// first where it is going; both contributions are written or removed; the
+// configuration is rebuilt once around them; the daemon is started where it
+// is staying. Volumio rewrites its configuration only if it came out
+// different.
+EvoSabre.prototype.applyAudioPath = function () {
     var self = this;
-    var file = path.join(ASOUND_DIR, keepalive.CONTRIBUTION);
+    var name = self.commandRouter.getI18nString('EVOSABRE.PLUGIN_NAME');
+    var want = self.audioPathWanted();
+    var failed = function (e) {
+        self.commandRouter.pushToastMessage('error', name,
+            self.commandRouter.getI18nString('EVOSABRE.PATH_FAILED').replace('{{error}}', e && e.message ? e.message : e));
+    };
+    if (want.standalone) {
+        self.commandRouter.pushToastMessage('info', name, self.commandRouter.getI18nString('EVOSABRE.CLICK_STANDALONE'));
+    }
+    var before = want.keeper
+        ? libQ.resolve()
+        : self.systemctl('stop', KEEPALIVE_SERVICE).fail(function () { /* not running */ });
+    return before
+        .then(function () {
+            self.contribute(keepalive.CONTRIBUTION, want.keeper ? keepalive.contribution(__dirname) : null);
+            self.contribute(tap.CONTRIBUTION, want.tap ? tap.contribution(__dirname) : null);
+            return self.rebuildAlsa();
+        })
+        .then(function () {
+            return want.keeper ? self.systemctl('restart', KEEPALIVE_SERVICE) : libQ.resolve();
+        })
+        .then(function () {
+            if (want.keeper || want.tap) { self.checkChain(want); }
+        })
+        .fail(failed);
+};
+
+// Out of the audio path altogether, as the plugin stops.
+EvoSabre.prototype.leaveAudioPath = function () {
+    var self = this;
     return self.systemctl('stop', KEEPALIVE_SERVICE)
         .fail(function () { /* not running */ })
         .then(function () {
-            if (!fs.existsSync(file)) {
-                return libQ.resolve();
+            var had = fs.existsSync(path.join(ASOUND_DIR, keepalive.CONTRIBUTION)) ||
+                fs.existsSync(path.join(ASOUND_DIR, tap.CONTRIBUTION));
+            try {
+                self.contribute(keepalive.CONTRIBUTION, null);
+                self.contribute(tap.CONTRIBUTION, null);
+            } catch (e) {
+                self.logger.error(id + 'audio path: ' + e.message);
             }
-            try { fs.unlinkSync(file); } catch (e) { self.logger.error(id + file + ': ' + e.message); }
-            return self.rebuildAlsa();
-        });
-};
-
-// The switch as it stands: on, the contribution is written, the
-// configuration rebuilt around it and the daemon started; off, all three
-// are undone. Where the Audio Keepalive plugin already holds the output
-// open, nothing is put behind it.
-EvoSabre.prototype.applyClickPrevention = function () {
-    var self = this;
-    var name = self.commandRouter.getI18nString('EVOSABRE.PLUGIN_NAME');
-    if (!form.isOn(self.config.get('click_prevention'), false)) {
-        return self.dropClickPrevention();
-    }
-    if (keepalive.standaloneOn()) {
-        self.commandRouter.pushToastMessage('info', name, self.commandRouter.getI18nString('EVOSABRE.CLICK_STANDALONE'));
-        return self.dropClickPrevention();
-    }
-    try {
-        fs.ensureDirSync(ASOUND_DIR);
-        fs.writeFileSync(path.join(ASOUND_DIR, keepalive.CONTRIBUTION), keepalive.contribution(__dirname), 'utf8');
-    } catch (e) {
-        self.logger.error(id + 'click prevention: ' + e.message);
-        self.commandRouter.pushToastMessage('error', name,
-            self.commandRouter.getI18nString('EVOSABRE.CLICK_FAILED').replace('{{error}}', e.message));
-        return libQ.resolve();
-    }
-    return self.rebuildAlsa()
-        .then(function () { return self.systemctl('restart', KEEPALIVE_SERVICE); })
-        .then(function () { self.checkChain(); })
-        .fail(function (e) {
-            self.commandRouter.pushToastMessage('error', name,
-                self.commandRouter.getI18nString('EVOSABRE.CLICK_FAILED').replace('{{error}}', e && e.message ? e.message : e));
+            return had ? self.rebuildAlsa() : libQ.resolve();
         });
 };
 
 // Volumio asks for contributions only from the plugins it knew when it
 // started: one installed since joins the chain after a restart. Looked at a
 // moment after the rebuild, and asked for once.
-EvoSabre.prototype.checkChain = function () {
+EvoSabre.prototype.checkChain = function (want) {
     var self = this;
     if (self.chainTimer) { clearTimeout(self.chainTimer); }
     self.chainTimer = setTimeout(function () {
         self.chainTimer = null;
         var asound = '';
         try { asound = fs.readFileSync(ASOUND_FILE, 'utf8'); } catch (e) { /* not written yet */ }
-        if (keepalive.inChain(asound)) {
+        if ((!want.keeper || keepalive.inChain(asound)) && (!want.tap || tap.inChain(asound))) {
             return;
         }
         self.commandRouter.broadcastMessage('openModal', {
-            title: self.commandRouter.getI18nString('EVOSABRE.CLICK_RESTART_TITLE'),
-            message: self.commandRouter.getI18nString('EVOSABRE.CLICK_RESTART_MSG'),
+            title: self.commandRouter.getI18nString('EVOSABRE.PATH_RESTART_TITLE'),
+            message: self.commandRouter.getI18nString('EVOSABRE.PATH_RESTART_MSG'),
             size: 'lg',
             buttons: [
                 { name: self.commandRouter.getI18nString('COMMON.RESTART'), class: 'btn btn-info', emit: 'reboot', payload: '' },
@@ -365,8 +395,14 @@ EvoSabre.prototype.save = function (data, keys) {
 EvoSabre.prototype.saveDisplay = function (data) {
     var self = this;
     var was = form.isOn(self.config.get('oled_active'), true);
-    if (!self.save(data, ['oled_active', 'contrast', 'clock_after', 'clock_segments', 'sleep_after', 'deep_sleep_after'])) {
+    var metered = form.isOn(self.config.get('meters'), false);
+    if (!self.save(data, ['oled_active', 'contrast', 'meters', 'meters_style', 'clock_after', 'clock_segments', 'sleep_after', 'deep_sleep_after'])) {
         return libQ.resolve();
+    }
+    if (form.isOn(self.config.get('meters'), false) !== metered) {
+        // The meters read a tap in the player's audio path: in with them,
+        // out without.
+        self.applyAudioPath();
     }
     if (form.isOn(self.config.get('oled_active'), true) !== was) {
         // A display just switched on starts before the store has written
@@ -388,7 +424,7 @@ EvoSabre.prototype.saveRemote = function (data) {
 
 EvoSabre.prototype.saveSound = function (data) {
     if (this.save(data, ['click_prevention'])) {
-        return this.applyClickPrevention();
+        return this.applyAudioPath();
     }
     return libQ.resolve();
 };

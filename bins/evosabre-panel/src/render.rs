@@ -7,7 +7,8 @@ use crate::config::Config;
 use crate::frame::{self, Frame};
 use crate::greeting;
 use crate::grey;
-use crate::layout::{self, Playing};
+use crate::layout::{self, Metered, Place, Playing};
+use crate::meters::{self, Bar};
 use crate::unifont::Unifont;
 use audiophonics_base::clock::LocalTime;
 use audiophonics_player::State;
@@ -107,11 +108,36 @@ pub fn all(dir: &Path, cfg: &Config) -> Result<Vec<PathBuf>, String> {
     ] {
         let mut screen = Playing::default();
         let mut frame = Frame::new();
-        screen.render(&mut frame, state, ADDRESS, t0, &mut font);
+        screen.render(&mut frame, state, ADDRESS, t0, &mut font, None);
         if !after.is_zero() {
             frame = Frame::new();
-            screen.render(&mut frame, state, ADDRESS, t0 + after, &mut font);
+            screen.render(&mut frame, state, ADDRESS, t0 + after, &mut font, None);
         }
+        shots.push((name, frame));
+    }
+
+    // The meters: a loud passage on the left, a quieter one on the right.
+    let bars = [
+        Bar {
+            level: meters::place(-14.0),
+            peak: meters::place(-6.0),
+            hold: meters::place(-2.5),
+        },
+        Bar {
+            level: meters::place(-19.0),
+            peak: meters::place(-11.0),
+            hold: meters::place(-8.0),
+        },
+    ];
+    for (name, place) in [
+        ("meters", Place::Under),
+        ("meters-left", Place::Left),
+        ("meters-right", Place::Right),
+    ] {
+        let mut screen = Playing::default();
+        let mut frame = Frame::new();
+        let meters = Metered { bars: &bars, place };
+        screen.render(&mut frame, &playing(), ADDRESS, t0, &mut font, Some(meters));
         shots.push((name, frame));
     }
 
@@ -155,7 +181,7 @@ mod tests {
             ..Config::default()
         };
         let files = all(&dir, &cfg).unwrap();
-        assert_eq!(files.len(), 13);
+        assert_eq!(files.len(), 16);
         for file in &files {
             let bytes = std::fs::read(file).unwrap();
             assert!(
