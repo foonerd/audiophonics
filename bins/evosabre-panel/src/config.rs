@@ -108,6 +108,9 @@ pub struct Config {
     pub meters: Option<Place>,
     /// Decibels added to what the meters show, -12 to 12.
     pub meters_gain: i8,
+    /// Whether the time row is drawn under the track: the time played,
+    /// the track's length and the bar between them.
+    pub track_time: bool,
 
     /// Whether the handset's transport keys are obeyed.
     pub remote: bool,
@@ -144,6 +147,7 @@ impl Default for Config {
             clock_segments: Unlit::VeryFaint,
             meters: None,
             meters_gain: 0,
+            track_time: true,
 
             remote: true,
             log_level: Level::Error,
@@ -248,6 +252,11 @@ pub fn from_store(store: &Store) -> (Config, Vec<String>) {
             )),
         }
     }
+    match store.switch("track_time") {
+        Ok(Some(v)) => c.track_time = v,
+        Ok(None) => {}
+        Err(e) => problems.push(e),
+    }
     match store.switch("meters") {
         Ok(Some(true)) => c.meters = Some(place),
         Ok(Some(false)) | Ok(None) => c.meters = None,
@@ -305,6 +314,7 @@ mod tests {
         assert_eq!(c.clock_segments, Unlit::VeryFaint);
         assert_eq!(c.meters, None);
         assert_eq!(c.meters_gain, 0);
+        assert!(c.track_time);
         assert!(c.remote);
         assert_eq!(c.log_level, Level::Error);
         assert!(c
@@ -329,6 +339,7 @@ mod tests {
             "meters": { "type": "boolean", "value": true },
             "meters_style": { "type": "string", "value": "vertical_right" },
             "meters_gain": { "type": "number", "value": -6 },
+            "track_time": { "type": "boolean", "value": false },
             "log_level": { "type": "string", "value": "info" }
         }"#,
         )
@@ -343,6 +354,7 @@ mod tests {
         assert_eq!(c.clock_segments, Unlit::Off);
         assert_eq!(c.meters, Some(Place::Right));
         assert_eq!(c.meters_gain, -6);
+        assert!(!c.track_time);
         assert_eq!(c.log_level, Level::Info);
         assert_eq!(c.dc_gpio, 27, "a key that is absent leaves its default");
     }

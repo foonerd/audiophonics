@@ -12,6 +12,8 @@
         "OLED_ACTIVE_DOC": "Off stops the display's program altogether: the display stays dark and the remote's transport keys are not read.",
         "CONTRAST": "Brightness",
         "CONTRAST_DOC": "From 1, the faintest, to 255.",
+        "TRACK_TIME": "Track time",
+        "TRACK_TIME_DOC": "The time played, the track's length and the bar between them, along the bottom of the display. Off leaves the bottom rows free; meters lying under the track then take them and are drawn taller.",
         "METERS": "Level meters",
         "METERS_DOC": "Two meters beside the track show how loud each channel is, on a scale of sixty decibels. The bright part of a meter is the level, the dimmer part reaches to the peak, and a mark holds the highest peak for a moment. The meters read a tap in the player's audio path, which every stream passes through unchanged; it is in that path only while this is on, and after the plugin is first installed it joins it once the player has restarted.",
         "METERS_STYLE": "Meters: where they stand",

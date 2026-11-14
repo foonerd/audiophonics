@@ -5,6 +5,7 @@ All notable changes to the Audiophonics Evo Sabre plugin are recorded here. The 
 ## [2.99.7] - 2026-11-14
 
 - **Meters: gain**, from -12 to 12 dB, added to what the level meters show. It moves the meters only; what is played is not touched.
+- **Track time**, a switch, on unless you switch it off: the time played, the track's length and the bar between them. Off, the bottom rows are free, and meters lying under the track take them: taller, with room around them.
 
 ## [2.99.6] - 2026-11-14
 

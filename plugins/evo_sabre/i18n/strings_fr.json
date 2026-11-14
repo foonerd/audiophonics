@@ -12,6 +12,8 @@
         "OLED_ACTIVE_DOC": "Éteint arrête complètement le programme de l'écran : l'écran reste noir et les touches de transport de la télécommande ne sont pas lues.",
         "CONTRAST": "Luminosité",
         "CONTRAST_DOC": "De 1, le plus faible, à 255.",
+        "TRACK_TIME": "Durée du morceau",
+        "TRACK_TIME_DOC": "Le temps écoulé, la durée du morceau et la barre entre les deux, en bas de l'afficheur. Désactivé, les lignes du bas restent libres ; les indicateurs couchés sous le morceau les occupent alors et sont dessinés plus hauts.",
         "METERS": "Indicateurs de niveau",
         "METERS_DOC": "Deux indicateurs à côté du morceau montrent le niveau de chaque canal, sur une échelle de soixante décibels. La partie claire d'un indicateur est le niveau, la partie plus sombre va jusqu'à la crête, et un repère retient un instant la crête la plus haute. Les indicateurs lisent une prise dans le chemin audio du lecteur, que chaque flux traverse sans être modifié ; elle n'est dans ce chemin que lorsque ce réglage est activé, et après la première installation du plugin elle le rejoint au redémarrage du lecteur.",
         "METERS_STYLE": "Indicateurs : emplacement",

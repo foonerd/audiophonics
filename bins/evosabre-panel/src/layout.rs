@@ -57,6 +57,12 @@ const METER_ROWS: u32 = 4;
 const METER_LEFT_Y: u32 = 45;
 const METER_MARKS_Y: u32 = METER_LEFT_Y + METER_ROWS;
 const METER_RIGHT_Y: u32 = METER_MARKS_Y + 1;
+/// Without the time row the meters have its rows too: taller, with a clear
+/// row either side of the marks, down to the bottom row but one.
+const METER_TALL_ROWS: u32 = 7;
+const METER_TALL_LEFT_Y: u32 = 46;
+const METER_TALL_MARKS_Y: u32 = METER_TALL_LEFT_Y + METER_TALL_ROWS + 1;
+const METER_TALL_RIGHT_Y: u32 = METER_TALL_MARKS_Y + 2;
 /// Where the marks stand, in decibels under full scale.
 const METER_MARKS_DB: [f32; 8] = [-50.0, -40.0, -30.0, -20.0, -10.0, -6.0, -3.0, 0.0];
 /// Upright, the meters stand from under the hairline to the bottom row but
@@ -206,7 +212,7 @@ fn meter_x(place: f32) -> u32 {
 
 /// One channel: bright as far as its level, dimmer as far as its peak, the
 /// faintest grey for the rest, and the hold as a mark two columns wide.
-fn meter(f: &mut Frame, y: u32, bar: &Bar) {
+fn meter(f: &mut Frame, y: u32, rows: u32, bar: &Bar) {
     let level = meter_x(bar.level);
     let peak = meter_x(bar.peak).max(level);
     for x in 0..W {
@@ -217,26 +223,37 @@ fn meter(f: &mut Frame, y: u32, bar: &Bar) {
         } else {
             METER_REST
         };
-        for row in 0..METER_ROWS {
+        for row in 0..rows {
             f.set(x, y + row, luma);
         }
     }
     if bar.hold > 0.0 {
         let hold = meter_x(bar.hold).max(1);
         for x in hold - 1..=hold {
-            for row in 0..METER_ROWS {
+            for row in 0..rows {
                 f.set(x, y + row, METER_HOLD);
             }
         }
     }
 }
 
-/// The two channels, left over right, with the scale's marks between them.
-fn meter_pair(f: &mut Frame, bars: &[Bar; 2]) {
-    meter(f, METER_LEFT_Y, &bars[0]);
-    meter(f, METER_RIGHT_Y, &bars[1]);
+/// The two channels, left over right, with the scale's marks between them:
+/// in the album's rows, or `tall`, in those and the time row's.
+fn meter_pair(f: &mut Frame, bars: &[Bar; 2], tall: bool) {
+    let (left, marks, right, rows) = if tall {
+        (
+            METER_TALL_LEFT_Y,
+            METER_TALL_MARKS_Y,
+            METER_TALL_RIGHT_Y,
+            METER_TALL_ROWS,
+        )
+    } else {
+        (METER_LEFT_Y, METER_MARKS_Y, METER_RIGHT_Y, METER_ROWS)
+    };
+    meter(f, left, rows, &bars[0]);
+    meter(f, right, rows, &bars[1]);
     for db in METER_MARKS_DB {
-        f.set(meter_x(meters::place(db)), METER_MARKS_Y, METER_MARK);
+        f.set(meter_x(meters::place(db)), marks, METER_MARK);
     }
 }
 
@@ -318,9 +335,17 @@ fn joined(artist: &str, album: &str) -> String {
 pub struct Playing {
     title: Marquee,
     second: Marquee,
+    /// The time row left out: the time played, the track's length and the
+    /// bar between them.
+    no_time: bool,
 }
 
 impl Playing {
+    /// Whether the time row is drawn. It is unless this says otherwise.
+    pub fn show_time(&mut self, shown: bool) {
+        self.no_time = !shown;
+    }
+
     /// The track, and the level meters where they are asked for: under the
     /// track, where the artist and the album share a line to make room, or
     /// upright at one side, where every line is that much shorter.
@@ -341,7 +366,7 @@ impl Playing {
                 place: Place::Under,
             }) => {
                 self.lines(f, s, now, font, W, true);
-                meter_pair(f, bars);
+                meter_pair(f, bars, self.no_time);
             }
             Some(Metered { bars, place }) => {
                 // The lines are drawn narrower and set down beside the
@@ -424,7 +449,9 @@ impl Playing {
                 width,
             );
         }
-        time_row(f, s, width);
+        if !self.no_time {
+            time_row(f, s, width);
+        }
     }
 
     /// True while a line is moving, so the caller redraws at the marquee's
@@ -775,7 +802,7 @@ pub mod tests {
     #[test]
     fn a_meter_is_bright_to_its_level_dimmer_to_its_peak_and_marks_its_hold() {
         let mut f = Frame::new();
-        meter_pair(&mut f, &bars(0.25, 0.5, 0.75));
+        meter_pair(&mut f, &bars(0.25, 0.5, 0.75), false);
         let y = METER_LEFT_Y;
         let (level, peak, hold) = (meter_x(0.25), meter_x(0.5), meter_x(0.75));
         for row in 0..METER_ROWS {
@@ -803,7 +830,7 @@ pub mod tests {
     #[test]
     fn a_peak_at_full_scale_holds_at_the_right_edge_and_stays_in_the_picture() {
         let mut f = Frame::new();
-        meter_pair(&mut f, &bars(1.0, 1.0, 1.0));
+        meter_pair(&mut f, &bars(1.0, 1.0, 1.0), false);
         assert_eq!(f.get(W - 1, METER_LEFT_Y), METER_HOLD);
         assert_eq!(f.get(W - 3, METER_LEFT_Y), METER_LEVEL);
         assert!(
@@ -954,5 +981,66 @@ pub mod tests {
                 assert_eq!(left.get(x, y), plain.get(x, y));
             }
         }
+    }
+
+    #[test]
+    fn without_the_time_row_the_track_ends_at_the_album_and_the_meters_grow_into_its_rows() {
+        let s = metered_state();
+        let mut none = Unifont::new("/nonexistent/unifont.hex");
+        let now = Instant::now();
+
+        let mut with = Frame::new();
+        Playing::default().render(&mut with, &s, "10.0.0.1", now, &mut none, None);
+        let mut without = Frame::new();
+        let mut screen = Playing::default();
+        screen.show_time(false);
+        screen.render(&mut without, &s, "10.0.0.1", now, &mut none, None);
+        // The same picture above the time row, and nothing where it was.
+        for y in 0..frame::HEIGHT {
+            for x in 0..frame::WIDTH {
+                if y < TIME_Y as u32 {
+                    assert_eq!(with.get(x, y), without.get(x, y), "({x}, {y})");
+                } else {
+                    assert_eq!(without.get(x, y), 0, "({x}, {y})");
+                }
+            }
+        }
+        assert!(
+            (0..W).any(|x| with.get(x, BAR_Y) != 0),
+            "the time row is there by default"
+        );
+
+        let b = bars(0.5, 0.6, 0.7);
+        let under = Metered {
+            bars: &b,
+            place: Place::Under,
+        };
+        let mut tall = Frame::new();
+        screen.render(&mut tall, &s, "10.0.0.1", now, &mut none, Some(under));
+        for row in 0..METER_TALL_ROWS {
+            assert_eq!(tall.get(0, METER_TALL_LEFT_Y + row), METER_LEVEL);
+            assert_eq!(tall.get(W - 1, METER_TALL_RIGHT_Y + row), METER_REST);
+        }
+        // A clear row between the line above and the meters, and either
+        // side of the marks; the bottom row stays dark for the orbit.
+        assert!((0..W).all(|x| tall.get(x, METER_TALL_LEFT_Y - 1) == 0));
+        assert!((0..W).all(|x| tall.get(x, METER_TALL_MARKS_Y - 1) == 0));
+        assert!((0..W).all(|x| tall.get(x, METER_TALL_MARKS_Y + 1) == 0));
+        assert_eq!(tall.get(W - 1, METER_TALL_MARKS_Y), METER_MARK);
+        assert_eq!(METER_TALL_RIGHT_Y + METER_TALL_ROWS, 63);
+        assert!(
+            (0..frame::WIDTH).all(|x| tall.get(x, 63) == 0),
+            "row 63 lit"
+        );
+
+        // Upright meters lose the time row and nothing else.
+        let at_left = Metered {
+            bars: &b,
+            place: Place::Left,
+        };
+        let mut upright = Frame::new();
+        screen.render(&mut upright, &s, "10.0.0.1", now, &mut none, Some(at_left));
+        assert!((STRIP..W).all(|x| (TIME_Y as u32..frame::HEIGHT).all(|y| upright.get(x, y) == 0)));
+        assert_eq!(upright.get(0, COLUMN_BOTTOM), METER_LEVEL);
     }
 }

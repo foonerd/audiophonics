@@ -599,6 +599,7 @@ fn run(path: &str) -> Result<(), String> {
                 layout::Screen::Clock => clock.now(),
             };
             drawn_at = now;
+            screen.show_time(cfg.track_time);
             match &time {
                 Some(t) => {
                     layout::clock(&mut frame, &state, &ip, t, cfg.clock_segments.level());

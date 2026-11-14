@@ -19,6 +19,7 @@
                 "data": [
                     "oled_active",
                     "contrast",
+                    "track_time",
                     "meters",
                     "meters_style",
                     "meters_gain",
@@ -54,6 +55,13 @@
                             "step": 1
                         }
                     ]
+                },
+                {
+                    "id": "track_time",
+                    "element": "switch",
+                    "label": "TRANSLATE.EVOSABRE.TRACK_TIME",
+                    "doc": "TRANSLATE.EVOSABRE.TRACK_TIME_DOC",
+                    "value": true
                 },
                 {
                     "id": "meters",

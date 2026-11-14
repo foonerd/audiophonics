@@ -140,6 +140,19 @@ pub fn all(dir: &Path, cfg: &Config) -> Result<Vec<PathBuf>, String> {
         screen.render(&mut frame, &playing(), ADDRESS, t0, &mut font, Some(meters));
         shots.push((name, frame));
     }
+    // Without the time row: the track alone, and the meters grown into it.
+    let mut screen = Playing::default();
+    screen.show_time(false);
+    let mut frame = Frame::new();
+    screen.render(&mut frame, &playing(), ADDRESS, t0, &mut font, None);
+    shots.push(("playing-no-time", frame));
+    let mut frame = Frame::new();
+    let meters = Metered {
+        bars: &bars,
+        place: Place::Under,
+    };
+    screen.render(&mut frame, &playing(), ADDRESS, t0, &mut font, Some(meters));
+    shots.push(("meters-no-time", frame));
 
     let mut frame = Frame::new();
     let wednesday = LocalTime {
@@ -181,7 +194,7 @@ mod tests {
             ..Config::default()
         };
         let files = all(&dir, &cfg).unwrap();
-        assert_eq!(files.len(), 16);
+        assert_eq!(files.len(), 18);
         for file in &files {
             let bytes = std::fs::read(file).unwrap();
             assert!(

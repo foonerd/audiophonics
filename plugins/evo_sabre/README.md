@@ -35,6 +35,7 @@ Installing over version 2 of the plugin replaces it and starts the new display a
 | --- | --- |
 | Display on | Off stops the display's program: the display stays dark and the transport keys are not read. |
 | Brightness | 1 to 255. |
+| Track time | The time played, the track's length and the bar between them, along the bottom. On unless you switch it off. |
 | Level meters | Two meters beside the track, one a channel. Off unless you switch them on. |
 | Meters: where they stand | Lying under the track, or upright at its left or its right. |
 | Meters: gain (dB) | Decibels added to what the meters show, -12 to 12. What is played is not touched. |
@@ -54,6 +55,8 @@ Settings take effect when saved.
 Switch *Level meters* on and two meters stand beside the track, one a channel, on a scale of sixty decibels. The bright part of a meter is the level, averaged as a VU meter averages; the dimmer part reaches to the peak; a mark holds the highest peak for a moment before it falls. The marks between the two meters stand at 50, 40, 30, 20, 10, 6 and 3 decibels under full scale, and at full scale.
 
 *Meters: where they stand* places them. Lying under the track, the left channel is above the right and the scale runs from left to right; the artist and the album share the line under the title to make room. Upright at the left or the right of the track, the left channel comes first and the scale runs from the bottom up; the track keeps its three lines, each a little shorter.
+
+With *Track time* off, meters lying under the track have the bottom rows as well and are drawn taller, with more room around them.
 
 *Meters: gain* adds up to twelve decibels to what the meters show, or takes as many away: up for music that leaves them low, down for music that keeps them at the top. It moves the meters only.
 
