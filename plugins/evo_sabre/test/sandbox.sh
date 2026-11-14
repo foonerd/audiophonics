@@ -8,28 +8,46 @@ SETTINGS=/data/configuration/system_hardware/audiophonics_evo_sabre/config.json
 PLUGINS=/data/configuration/plugins.json
 CALLS=/tmp/calls
 ACTIVE=/tmp/active
+FAILING=/tmp/failing
+GPIO=/tmp/gpio
+UNEXPORTED=/tmp/unexported
 USERCONFIG=/boot/userconfig.txt
 STARTED="systemctl enable --now evosabre-panel.service"
 
 # What the scripts ask of the system is written down, not done. A unit is
-# active when the case says so.
+# active when the case says so, or once it has been started, unless the case
+# says it does not stay up.
 mkdir -p /usr/local/sbin
-for tool in udevadm visudo; do
+for tool in udevadm visudo sleep; do
   printf '#!/bin/sh\necho "%s $*" >> %s\n' "$tool" "$CALLS" > "/usr/local/sbin/$tool"
   chmod +x "/usr/local/sbin/$tool"
 done
 cat > /usr/local/sbin/systemctl << STUB
 #!/bin/sh
 echo "systemctl \$*" >> $CALLS
-if [ "\$1" = is-active ]; then
-  for unit in "\$@"; do
-    [ -e "$ACTIVE/\$unit" ] && exit 0
-  done
-  exit 3
-fi
+case "\$1" in
+  is-active)
+    for unit in "\$@"; do
+      [ -e "$ACTIVE/\$unit" ] && exit 0
+    done
+    exit 3
+    ;;
+  enable)
+    if [ "\$2" = --now ] && [ ! -e "$FAILING/\$3" ]; then
+      : > "$ACTIVE/\$3"
+    fi
+    ;;
+  stop)
+    rm -f "$ACTIVE/\$2"
+    ;;
+esac
 exit 0
 STUB
 chmod +x /usr/local/sbin/systemctl
+
+# The installer looks for GPIO lines taken through sysfs here, in place of
+# /sys/class/gpio, which a container may not write to.
+export EVOSABRE_GPIO_SYS="$GPIO"
 useradd -m volumio
 
 fail() {
@@ -43,12 +61,12 @@ fail() {
 
 # A player with the plugin's files unpacked and nothing installed yet.
 player() {
-  rm -rf /data "$CALLS" "$ACTIVE" /etc/systemd/system/evo*.service \
+  rm -rf /data "$CALLS" "$ACTIVE" "$FAILING" "$GPIO" "$UNEXPORTED" /etc/systemd/system/evo*.service \
     /etc/udev/rules.d/70-evosabre-remote.rules /etc/sudoers.d/volumio-user-audiophonics_evo_sabre
   rm -f /boot/config.txt /boot/volumioconfig.txt "$USERCONFIG"
-  mkdir -p "$PLUGIN/bin" "$ACTIVE" /boot /etc/systemd/system /etc/udev/rules.d /etc/sudoers.d
+  mkdir -p "$PLUGIN/bin" "$ACTIVE" "$FAILING" /boot /etc/systemd/system /etc/udev/rules.d /etc/sudoers.d
   cp -r /src/. "$PLUGIN/"
-  printf '#!/bin/sh\necho "evosabre-panel 2.99.1"\n' > "$PLUGIN/bin/evosabre-panel"
+  printf '#!/bin/sh\necho "evosabre-panel 2.99.2"\n' > "$PLUGIN/bin/evosabre-panel"
   printf '#!/bin/sh\necho "audio-keepalive-daemon 2.1.1"\n' > "$PLUGIN/keepalive/audio-keepalive-daemon"
   printf 'dtparam=audio=on\n' > /boot/config.txt
   : > "$CALLS"
@@ -74,6 +92,42 @@ enabled_plugin() {
 }
 JSON
   printf '{"oled_active":{"type":"boolean","value":%s},"contrast":{"type":"number","value":100}}' "$1" > "$SETTINGS"
+}
+
+# The kernel's list of GPIO lines taken through sysfs: a chip is a label and
+# the number its lines start at, a taken line is a folder, and a number
+# written to unexport gives that line back. What is written there is kept,
+# and the line's folder goes, as the kernel's does.
+gpio_chip() {
+  mkdir -p "$GPIO/gpiochip$1"
+  echo "$1" > "$GPIO/gpiochip$1/base"
+  echo "$2" > "$GPIO/gpiochip$1/label"
+}
+gpio_taken() {
+  for line in "$@"; do
+    mkdir -p "$GPIO/gpio$line"
+  done
+}
+gpio_listen() {
+  : > "$UNEXPORTED"
+  mkfifo "$GPIO/unexport"
+  (
+    while :; do
+      while read -r line; do
+        if [ "$line" = end ]; then
+          exit 0
+        fi
+        echo "$line" >> "$UNEXPORTED"
+        rmdir "$GPIO/gpio$line" 2>/dev/null || true
+      done < "$GPIO/unexport"
+    done
+  ) &
+  LISTENER=$!
+}
+gpio_heard() {
+  echo end > "$GPIO/unexport"
+  wait "$LISTENER"
+  HEARD=$(sort -n "$UNEXPORTED" | tr '\n' ' ')
 }
 
 installed() {
@@ -151,7 +205,15 @@ for old in evo_oled2 evo_remote evo_irexec; do
   ln -s "$PLUGIN/service/$old.service" "/etc/systemd/system/$old.service"
 done
 : > "$ACTIVE/evo_oled2.service"
+gpio_chip 512 pinctrl-bcm2711
+gpio_chip 570 raspberrypi-exp-gpio
+gpio_taken 536 539
+gpio_listen
 out=$(sh "$PLUGIN/install.sh")
+gpio_heard
+[ "$HEARD" = "536 539 " ] || fail "upgrade: released '$HEARD', not version 2's two lines"
+echo "$out" | grep -q "Released GPIO 27" || fail "upgrade: no word about GPIO 27: $out"
+echo "$out" | grep -q "Released GPIO 24" || fail "upgrade: no word about GPIO 24: $out"
 installed upgrade
 [ "$(cat "$USERCONFIG")" = 'dtparam=spi=on
 dtoverlay=gpio-ir,gpio_pin=4' ] || fail "upgrade: the boot configuration was touched"
@@ -165,9 +227,65 @@ if [ -e "$PLUGIN/apps" ] || [ -e "$PLUGIN/service" ]; then
   fail "upgrade: version 2's folders are still there"
 fi
 grep -q "^$STARTED" "$CALLS" || fail "upgrade: the display was left dark"
+released=$(grep -n "^systemctl stop evo_oled2.service" "$CALLS" | head -1 | cut -d: -f1)
+started=$(grep -n "^$STARTED" "$CALLS" | head -1 | cut -d: -f1)
+[ "$released" -lt "$started" ] || fail "upgrade: the display was started before version 2 was stopped"
+echo "$out" | grep -q "The display is running the new version" || fail "upgrade: no word that the display is up: $out"
 echo "$out" | grep -q "Restart the player to finish the update" || fail "upgrade: no word about finishing the update: $out"
 echo "$out" | grep -q "Restart the player once" && fail "upgrade: asked for a boot-configuration restart with nothing changed"
-echo "ok: an install over version 2 in use removes its services, keeps its boot lines and starts the display"
+echo "ok: an install over version 2 in use removes its services, releases its GPIO lines, keeps its boot lines and starts the display"
+
+# --- Version 2's lines on a Pi 5, its services already gone: the two lines
+# --- are found by the pin controller's label and released; a line somebody
+# --- else took, and the same places on another chip, are left alone. ---------
+player
+enabled_plugin true
+printf 'dtparam=spi=on\ndtoverlay=gpio-ir,gpio_pin=4\n' > "$USERCONFIG"
+gpio_chip 512 gpio-brcmstb@107d508500
+gpio_chip 571 pinctrl-rp1
+gpio_taken 595 598 588 536 539
+gpio_listen
+out=$(sh "$PLUGIN/install.sh")
+gpio_heard
+[ "$HEARD" = "595 598 " ] || fail "pi 5: released '$HEARD', not the display's two lines"
+for kept in 588 536 539; do
+  [ -d "$GPIO/gpio$kept" ] || fail "pi 5: line $kept was released, and is not the display's"
+done
+echo "$out" | grep -q "The display is running the new version" || fail "pi 5: no word that the display is up: $out"
+echo "ok: on a Pi 5 the display's two lines are released and no others"
+
+# --- Nothing taken through sysfs: nothing is released. ------------------------
+player
+gpio_chip 571 pinctrl-rp1
+gpio_listen
+out=$(sh "$PLUGIN/install.sh")
+gpio_heard
+[ -z "$HEARD" ] || fail "free: released '$HEARD' with nothing taken"
+echo "$out" | grep -q "Released GPIO" && fail "free: spoke of releasing with nothing taken"
+echo "ok: with no line taken through sysfs nothing is released"
+
+# --- A line that cannot be released is said, with what to do about it. -------
+player
+printf 'dtparam=spi=on\ndtoverlay=gpio-ir,gpio_pin=4\n' > "$USERCONFIG"
+gpio_chip 571 pinctrl-rp1
+gpio_taken 598
+ln -s /dev/full "$GPIO/unexport"
+out=$(sh "$PLUGIN/install.sh")
+echo "$out" | grep -q "^plugininstallend$" || fail "held: the install did not finish: $out"
+echo "$out" | grep -q "WARNING: GPIO 27 is still taken" || fail "held: no word about the line: $out"
+echo "$out" | grep -q "Restart the player: the display's GPIO lines are free again" || fail "held: no word about the restart: $out"
+echo "ok: a line that cannot be released is said, and the restart that frees it"
+
+# --- A display that does not stay up is not called running. ------------------
+player
+enabled_plugin true
+printf 'dtparam=spi=on\ndtoverlay=gpio-ir,gpio_pin=4\n' > "$USERCONFIG"
+: > "$FAILING/evosabre-panel.service"
+out=$(sh "$PLUGIN/install.sh")
+echo "$out" | grep -q "The display is running" && fail "dark: a display that did not stay up was called running"
+echo "$out" | grep -q "WARNING: the display did not stay up" || fail "dark: no word about it: $out"
+echo "$out" | grep -q "^plugininstallend$" || fail "dark: the install did not finish: $out"
+echo "ok: a display that does not stay up is said, not called running"
 
 # --- Over this plugin, enabled: the display is started again. ----------------
 player
@@ -175,6 +293,7 @@ enabled_plugin true
 printf 'dtparam=spi=on\ndtoverlay=gpio-ir,gpio_pin=4\n' > "$USERCONFIG"
 out=$(sh "$PLUGIN/install.sh")
 grep -q "^$STARTED" "$CALLS" || fail "update: the display was left dark"
+echo "$out" | grep -q "The display is running the new version" || fail "update: no word that the display is up: $out"
 echo "$out" | grep -q "Restart the player to finish the update" || fail "update: no word about finishing the update"
 echo "ok: an update of the plugin in use starts the display again"
 

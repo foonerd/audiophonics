@@ -8,7 +8,7 @@
 
 use crate::config::Config;
 use crate::frame::{self, Frame};
-use gpio_cdev::{Chip, LineHandle, LineRequestFlags};
+use gpio_cdev::{Chip, Line, LineHandle, LineRequestFlags};
 use spidev::{SpiModeFlags, Spidev, SpidevOptions};
 use std::io::Write;
 use std::thread::sleep;
@@ -205,8 +205,52 @@ fn open_chip(label: Option<&str>) -> Result<Chip> {
 }
 
 fn request_output(chip: &mut Chip, offset: u32, initial: u8, what: &str) -> Result<LineHandle> {
-    chip.get_line(offset)
-        .map_err(|e| format!("gpio {offset} ({what}): {e}"))?
-        .request(LineRequestFlags::OUTPUT, initial, CONSUMER)
-        .map_err(|e| format!("gpio {offset} ({what}): request: {e}"))
+    let line = chip
+        .get_line(offset)
+        .map_err(|e| format!("gpio {offset} ({what}): {e}"))?;
+    line.request(LineRequestFlags::OUTPUT, initial, CONSUMER)
+        .map_err(|e| format!("gpio {offset} ({what}): request: {e}{}", holder(&line)))
+}
+
+/// Who has a line that could not be taken, as the kernel tells it.
+fn holder(line: &Line) -> String {
+    line.info()
+        .map(|info| held_by(info.consumer(), info.is_used()))
+        .unwrap_or_default()
+}
+
+/// What to add to a refusal. The kernel names whoever took a line; a line
+/// exported through /sys/class/gpio is named "sysfs" and stays taken after
+/// the program that exported it has gone.
+fn held_by(consumer: Option<&str>, used: bool) -> String {
+    match consumer {
+        Some("sysfs") => "; the line was taken through /sys/class/gpio and not given back, \
+                          and is free again once the player has restarted"
+            .to_string(),
+        Some(name) if !name.is_empty() => format!("; the line is held by {name}"),
+        _ if used => "; the line is in use by the kernel".to_string(),
+        _ => String::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_refused_line_names_whoever_holds_it() {
+        let sysfs = held_by(Some("sysfs"), true);
+        assert!(sysfs.contains("/sys/class/gpio"), "{sysfs}");
+        assert!(sysfs.contains("restarted"), "{sysfs}");
+        assert_eq!(
+            held_by(Some("spi0 CS0"), true),
+            "; the line is held by spi0 CS0"
+        );
+        assert_eq!(held_by(None, true), "; the line is in use by the kernel");
+        assert_eq!(
+            held_by(Some(""), true),
+            "; the line is in use by the kernel"
+        );
+        assert_eq!(held_by(None, false), "", "nothing to add for a free line");
+    }
 }

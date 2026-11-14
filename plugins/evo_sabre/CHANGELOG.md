@@ -2,6 +2,12 @@
 
 All notable changes to the Audiophonics Evo Sabre plugin are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.99.2] - 2026-11-14
+
+- **Updating over version 2 no longer leaves the display dark until the player restarts.** Version 2's display took the display's two GPIO lines through `/sys/class/gpio` and did not give them back when it stopped, so the new display was refused them. The installer now releases those two lines, and only those.
+- The installer says whether the display stayed up after an update, instead of saying it is running as soon as it has been started.
+- A display that is refused a GPIO line says in its journal who holds the line.
+
 ## [2.99.1] - 2026-11-14
 
 - **Click prevention**, a switch on the settings page, off until you switch it on. It is for a DAC that clicks, or loses the first moment of a track, when playback starts or resumes. With it on, the audio output is held open so the DAC's clocks never stop: a small program, Audio Keepalive, takes over the output, passes the music through untouched, and sends noise far too quiet to hear while nothing plays. On a Raspberry Pi 5 the DAC is otherwise given its clocks only while something plays. A change of sample rate still reopens the output.

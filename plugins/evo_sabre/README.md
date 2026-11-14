@@ -69,6 +69,8 @@ It says which board it found, how it opened the display, what the player is doin
 
 **The display stays dark after installing.** Restart the player: the SPI bus is switched on in the boot configuration, which is read at start.
 
+**The display stays dark and its journal says a GPIO line is busy.** Another program has the display's D/C or reset line; the journal names it. A line *taken through /sys/class/gpio* was left by a program that has since stopped, as version 2 of this plugin left its two, and stays taken until the player restarts. The installer releases the two that version 2 left.
+
 **The remote does nothing.** Press a key, then Check the remote on the settings page. *Not found* means the receiver's overlay is not loaded: restart the player. The display looks for the receiver again every few seconds, so one that comes up late is picked up. A receiver that is read but reports no key has not had its decoder switched on:
 
     cat /sys/class/rc/rc*/protocols
@@ -77,7 +79,7 @@ It says which board it found, how it opened the display, what the player is doin
 
 ## What it installs
 
-Outside its own folder, the plugin installs two systemd units (`evosabre-panel.service` for the display, `evosabre-keepalive.service` for Click prevention), udev rules for the receiver's decoder and its device, a sudoers entry for switching the two services, and a marked block of two lines in `/boot/userconfig.txt`. Uninstalling removes them all.
+Outside its own folder, the plugin installs two systemd units (`evosabre-panel.service` for the display, `evosabre-keepalive.service` for Click prevention), udev rules for the receiver's decoder and its device, a sudoers entry for switching the two services, and a marked block of two lines in `/boot/userconfig.txt`. Uninstalling removes them all. Installing also removes version 2's three services and releases the display's two GPIO lines where version 2 left them taken.
 
 ## Credits
 

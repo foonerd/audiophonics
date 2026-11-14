@@ -20,6 +20,9 @@ MARK_BEGIN="# >>> audiophonics_evo_sabre"
 MARK_END="# <<< audiophonics_evo_sabre"
 PLUGINS="/data/configuration/plugins.json"
 SETTINGS="/data/configuration/system_hardware/audiophonics_evo_sabre/config.json"
+# Where the kernel lists the GPIO lines taken through sysfs. The installer's
+# own tests stand a directory in for it.
+GPIO_SYS="${EVOSABRE_GPIO_SYS:-/sys/class/gpio}"
 
 # A refused install leaves nothing behind, so the next attempt starts clean.
 refuse() {
@@ -89,6 +92,45 @@ for old in evo_oled2 evo_remote evo_irexec; do
   fi
 done
 rm -rf "$PLUGIN_DIR/apps" "$PLUGIN_DIR/service"
+
+# =============================================================================
+# REPLACE: the GPIO lines version 2's display left taken. It took the
+# display's two lines, D/C on GPIO 27 and reset on GPIO 24, through
+# /sys/class/gpio and did not give them back when it stopped. The kernel
+# keeps such a line taken until the player restarts, and refuses it to this
+# version's display. They are given back here: those two lines on the SoC's
+# own pin controller, where they are taken that way, and no others. The
+# controller is found by its label, as the display finds it, since its
+# numbering differs between the Pi 4 and the Pi 5 families.
+# =============================================================================
+HELD=0
+if [ -w "$GPIO_SYS/unexport" ]; then
+  for chip in "$GPIO_SYS"/gpiochip*; do
+    if [ ! -r "$chip/label" ] || [ ! -r "$chip/base" ]; then
+      continue
+    fi
+    case "$(cat "$chip/label")" in
+      pinctrl-*) ;;
+      *) continue ;;
+    esac
+    base=$(cat "$chip/base")
+    case "$base" in
+      '' | *[!0-9]*) continue ;;
+    esac
+    for offset in 27 24; do
+      line=$((base + offset))
+      if [ ! -d "$GPIO_SYS/gpio$line" ]; then
+        continue
+      fi
+      if echo "$line" > "$GPIO_SYS/unexport" 2>/dev/null; then
+        echo "Released GPIO $offset, left taken by version 2's display"
+      else
+        HELD=1
+        echo "WARNING: GPIO $offset is still taken and could not be released"
+      fi
+    done
+  done
+fi
 
 # =============================================================================
 # SETUP: the boot configuration. The display is on the SPI bus and the
@@ -187,17 +229,24 @@ chown -R volumio:volumio "$PLUGIN_DIR"
 # An update of a plugin in use: Volumio goes on running the previous
 # version's code until the player restarts and starts nothing of the new
 # one, so the display is started here rather than left dark until then.
+# systemd counts the service started as soon as its program is run; a
+# display that cannot be opened ends it a moment later, so it is looked at
+# again before anything is said of it.
 if [ "$IN_USE" = 1 ] && [ "$DISPLAY_ON" = 1 ]; then
-  if systemctl enable --now "$SERVICE.service" 2>/dev/null; then
+  systemctl enable --now "$SERVICE.service" 2>/dev/null || true
+  sleep 2
+  if systemctl is-active --quiet "$SERVICE.service" 2>/dev/null; then
     echo "The display is running the new version"
   else
-    echo "WARNING: the display's service did not start; it will when the player restarts"
+    echo "WARNING: the display did not stay up; 'journalctl -u $SERVICE' says why"
   fi
 fi
 
 echo "Audiophonics Evo Sabre installed"
 if [ "$REBOOT" = 1 ]; then
   echo "Restart the player once: the display and the remote come up on the new boot configuration"
+elif [ "$HELD" = 1 ]; then
+  echo "Restart the player: the display's GPIO lines are free again once it has"
 elif [ "$IN_USE" = 1 ]; then
   echo "Restart the player to finish the update: until then the plugin's settings page is the previous version's"
 fi
