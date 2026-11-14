@@ -16,6 +16,7 @@ var exec = require('child_process').exec;
 var remote = require('./lib/remote');
 var form = require('./lib/form');
 var keepalive = require('./lib/keepalive');
+var volume = require('./lib/volume');
 
 var SERVICE = 'evosabre-panel.service';
 var KEEPALIVE_SERVICE = 'evosabre-keepalive.service';
@@ -187,12 +188,20 @@ EvoSabre.prototype.askRestartIfNeeded = function () {
 // -----------------------------------------------------------------------------
 
 // Volumio's ALSA configuration, written again from every plugin's
-// contribution. Resolves whatever becomes of it: the page says the rest.
+// contribution. Where the file changed, Volumio has had ALSA restore its
+// stored mixer state, so the volume and the mute the player had are asked
+// for again. Resolves whatever becomes of it: the page says the rest.
 EvoSabre.prototype.rebuildAlsa = function () {
     var self = this;
     var defer = libQ.defer();
     var done = false;
-    var finish = function () { if (!done) { done = true; defer.resolve(); } };
+    var was = self.volumeNow();
+    var finish = function (result) {
+        if (done) { return; }
+        done = true;
+        if (result && result.changed) { self.restoreVolume(was); }
+        defer.resolve();
+    };
     var asked;
     try {
         asked = self.commandRouter.executeOnPlugin('audio_interface', 'alsa_controller', 'updateALSAConfigFile');
@@ -202,11 +211,34 @@ EvoSabre.prototype.rebuildAlsa = function () {
         return defer.promise;
     }
     if (asked && typeof asked.then === 'function') {
-        asked.then(finish).fail(finish);
+        asked.then(finish).fail(function () { finish(); });
     } else {
         finish();
     }
     return defer.promise;
+};
+
+EvoSabre.prototype.volumeNow = function () {
+    try {
+        return volume.held(this.commandRouter.volumioGetState());
+    } catch (e) {
+        return null;
+    }
+};
+
+// The volume first, which also unmutes; the mute a moment later, once
+// Volumio has the volume to come back to.
+EvoSabre.prototype.restoreVolume = function (was) {
+    var self = this;
+    volume.steps(was).forEach(function (step, i) {
+        setTimeout(function () {
+            try {
+                self.commandRouter.volumiosetvolume(step);
+            } catch (e) {
+                self.logger.error(id + 'volume: ' + e);
+            }
+        }, i * 1000);
+    });
 };
 
 // Out of the chain: the daemon stopped, the contribution gone, the

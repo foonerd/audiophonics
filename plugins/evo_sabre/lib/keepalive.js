@@ -11,8 +11,10 @@
 const fs = require('fs');
 const path = require('path');
 
-// The PCM the players write to, and the one the daemon writes on to.
+// The PCM the players write to, the ALSA client behind it, and the PCM the
+// daemon writes on to.
 const IN = 'evosabreKeepalive';
+const CLIENT = 'evosabreKeepaliveClient';
 const OUT = 'evosabreKeepaliveOut';
 // The contribution's file is named <in>.<out>.<rank>.conf; the rank puts it
 // last in the chain, next to the hardware.
@@ -22,8 +24,15 @@ const SOCKET = '/run/evosabre-keepalive/ctl.sock';
 // switched on, a second keeper is not put behind it.
 const STANDALONE = '/data/plugins/audio_interface/audio_keepalive/asound/keepaliveProxy.keepaliveProxyOut.-1.conf';
 
-// The contribution: the ALSA client by its path in the plugin's folder, and
-// the PCM that talks to the daemon.
+// The contribution: the ALSA client by its path in the plugin's folder, the
+// PCM that talks to the daemon, and a copy PCM in front of it.
+//
+// The copy PCM passes every sample through as it is. It is there for
+// Volumio's multiroom switcher, which sits just before this contribution in
+// the chain and takes anything but zero as a failure when it asks its
+// target for hardware parameters. ALSA answers that question for a client
+// of this kind with one where the parameters were narrowed, and with zero
+// through a copy PCM.
 function contribution(pluginDir) {
     return [
         'pcm_type.keepalive {',
@@ -31,6 +40,11 @@ function contribution(pluginDir) {
         '}',
         '',
         'pcm.' + IN + ' {',
+        '    type copy',
+        '    slave.pcm "' + CLIENT + '"',
+        '}',
+        '',
+        'pcm.' + CLIENT + ' {',
         '    type keepalive',
         '    socket "' + SOCKET + '"',
         '}'
@@ -48,4 +62,4 @@ function inChain(asound) {
     return String(asound || '').indexOf('pcm.' + IN + ' ') !== -1;
 }
 
-module.exports = { IN, OUT, CONTRIBUTION, SOCKET, STANDALONE, contribution, standaloneOn, inChain };
+module.exports = { IN, CLIENT, OUT, CONTRIBUTION, SOCKET, STANDALONE, contribution, standaloneOn, inChain };

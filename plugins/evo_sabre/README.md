@@ -55,7 +55,9 @@ After the plugin is installed or updated, Click prevention joins the player's au
 
 ## Setting up the DAC
 
-In Playback Options, switch I2S DAC on and choose **Audiophonics I-Sabre ES9028Q2M**, then restart the player when asked. Set DSD Playback Mode to **DSD over PCM (DoP)**. Under Volume Options, set Mixer Type to **Hardware** and Mixer Control Name to **Digital**.
+In Playback Options, switch I2S DAC on and choose **Audiophonics I-Sabre ES9028Q2M**, then restart the player when asked. Set DSD Playback Mode to **DSD over PCM (DoP)**. Under Volume Options, set Mixer Type to **Hardware**, Mixer Control Name to **Digital** and Volume Curve Mode to **Linear**.
+
+With Volume Curve Mode on Linear the volume on this display is the number on the DAC's own display. On Natural, Volumio counts the same volume on another scale, and the two displays show different numbers for it. The knob and the remote's volume keys change the volume on the DAC board itself, which does not report it to the player: this display shows that volume again the next time it is set from Volumio.
 
 The DAC board switches the power itself: wait for the player to finish shutting down before switching the unit off.
 
@@ -70,6 +72,8 @@ It says which board it found, how it opened the display, what the player is doin
 **The display stays dark after installing.** Restart the player: the SPI bus is switched on in the boot configuration, which is read at start.
 
 **The display stays dark and its journal says a GPIO line is busy.** Another program has the display's D/C or reset line; the journal names it. A line *taken through /sys/class/gpio* was left by a program that has since stopped, as version 2 of this plugin left its two, and stays taken until the player restarts. The installer releases the two that version 2 left.
+
+**Nothing plays with Click prevention on.** Look at its service: `systemctl status evosabre-keepalive`. While it is not running the audio path it is part of leads nowhere; switch Click prevention off to play without it.
 
 **The remote does nothing.** Press a key, then Check the remote on the settings page. *Not found* means the receiver's overlay is not loaded: restart the player. The display looks for the receiver again every few seconds, so one that comes up late is picked up. A receiver that is read but reports no key has not had its decoder switched on:
 

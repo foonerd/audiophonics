@@ -37,6 +37,11 @@ case "\$1" in
       : > "$ACTIVE/\$3"
     fi
     ;;
+  start)
+    if [ ! -e "$FAILING/\$2" ]; then
+      : > "$ACTIVE/\$2"
+    fi
+    ;;
   stop)
     rm -f "$ACTIVE/\$2"
     ;;
@@ -66,7 +71,7 @@ player() {
   rm -f /boot/config.txt /boot/volumioconfig.txt "$USERCONFIG"
   mkdir -p "$PLUGIN/bin" "$ACTIVE" "$FAILING" /boot /etc/systemd/system /etc/udev/rules.d /etc/sudoers.d
   cp -r /src/. "$PLUGIN/"
-  printf '#!/bin/sh\necho "evosabre-panel 2.99.2"\n' > "$PLUGIN/bin/evosabre-panel"
+  printf '#!/bin/sh\necho "evosabre-panel 2.99.3"\n' > "$PLUGIN/bin/evosabre-panel"
   printf '#!/bin/sh\necho "audio-keepalive-daemon 2.1.1"\n' > "$PLUGIN/keepalive/audio-keepalive-daemon"
   printf 'dtparam=audio=on\n' > /boot/config.txt
   : > "$CALLS"
@@ -296,6 +301,34 @@ grep -q "^$STARTED" "$CALLS" || fail "update: the display was left dark"
 echo "$out" | grep -q "The display is running the new version" || fail "update: no word that the display is up: $out"
 echo "$out" | grep -q "Restart the player to finish the update" || fail "update: no word about finishing the update"
 echo "ok: an update of the plugin in use starts the display again"
+
+# --- Click prevention running through an update is started again. ------------
+player
+enabled_plugin true
+printf 'dtparam=spi=on\ndtoverlay=gpio-ir,gpio_pin=4\n' > "$USERCONFIG"
+: > "$ACTIVE/evosabre-keepalive.service"
+out=$(sh "$PLUGIN/install.sh")
+grep -q "^systemctl start evosabre-keepalive.service" "$CALLS" || fail "click on: click prevention was left stopped"
+grep -q "systemctl enable.*evosabre-keepalive" "$CALLS" && fail "click on: click prevention was enabled by the installer"
+echo "$out" | grep -q "Click prevention is running the new version" || fail "click on: no word that it is running: $out"
+echo "ok: click prevention running through an update is started again"
+
+# --- Click prevention off through an update stays off; one that does not
+# --- start again is said. -----------------------------------------------------
+player
+enabled_plugin true
+printf 'dtparam=spi=on\ndtoverlay=gpio-ir,gpio_pin=4\n' > "$USERCONFIG"
+out=$(sh "$PLUGIN/install.sh")
+grep -q "^systemctl start evosabre-keepalive.service" "$CALLS" && fail "click off: click prevention was started against its switch"
+player
+enabled_plugin true
+printf 'dtparam=spi=on\ndtoverlay=gpio-ir,gpio_pin=4\n' > "$USERCONFIG"
+: > "$ACTIVE/evosabre-keepalive.service"
+: > "$FAILING/evosabre-keepalive.service"
+out=$(sh "$PLUGIN/install.sh")
+echo "$out" | grep -q "WARNING: click prevention did not start again" || fail "click failed: no word about it: $out"
+echo "$out" | grep -q "^plugininstallend$" || fail "click failed: the install did not finish: $out"
+echo "ok: click prevention off stays off, and one that does not start again is said"
 
 # --- Enabled, with the display switched off in its settings: left off. -------
 player

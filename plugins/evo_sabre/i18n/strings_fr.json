@@ -37,7 +37,7 @@
         "CLICK_RESTART_TITLE": "Un redémarrage est nécessaire",
         "CLICK_RESTART_MSG": "La prévention des clics rejoint le chemin audio du lecteur à son démarrage. Redémarrez le lecteur pour la mettre en service.",
         "SECTION_DAC": "Configurer le DAC",
-        "SECTION_DAC_DOC": "Dans Options de lecture : activez DAC I2S et choisissez Audiophonics I-Sabre ES9028Q2M, puis redémarrez le lecteur quand il le demande. Réglez le mode de lecture DSD sur DSD over PCM (DoP). Dans Options de volume, réglez le type de mixeur sur Hardware et le nom du contrôle de mixeur sur Digital. La carte DAC coupe elle-même l'alimentation : attendez la fin de l'arrêt du lecteur avant d'éteindre l'appareil.",
+        "SECTION_DAC_DOC": "Dans Options de lecture : activez DAC I2S et choisissez Audiophonics I-Sabre ES9028Q2M, puis redémarrez le lecteur quand il le demande. Réglez le mode de lecture DSD sur DSD over PCM (DoP). Dans Options de volume, réglez le type de mixeur sur Hardware, le nom du contrôle de mixeur sur Digital et le type de courbe de volume sur Linéaire : le volume affiché ici est alors le nombre affiché par le DAC lui-même. La carte DAC coupe elle-même l'alimentation : attendez la fin de l'arrêt du lecteur avant d'éteindre l'appareil.",
         "SECTION_JOURNAL": "Journal",
         "SECTION_JOURNAL_DOC": "Ce que le programme de l'écran écrit dans le journal du système. Pour le lire : journalctl -u evosabre-panel -f",
         "LOG_LEVEL": "Détail",

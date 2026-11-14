@@ -73,6 +73,12 @@ fi
 if systemctl is-active --quiet evo_oled2.service 2>/dev/null; then
   IN_USE=1
 fi
+# Click prevention's program, where it is running, is running the previous
+# version's file and is started again on this one's.
+KEEPALIVE_ON=0
+if systemctl is-active --quiet "$KEEPALIVE_SERVICE.service" 2>/dev/null; then
+  KEEPALIVE_ON=1
+fi
 DISPLAY_ON=1
 if [ -f "$SETTINGS" ] && flat "$SETTINGS" | grep -q '"oled_active":{[^}]*"value":"\{0,1\}false'; then
   DISPLAY_ON=0
@@ -239,6 +245,18 @@ if [ "$IN_USE" = 1 ] && [ "$DISPLAY_ON" = 1 ]; then
     echo "The display is running the new version"
   else
     echo "WARNING: the display did not stay up; 'journalctl -u $SERVICE' says why"
+  fi
+fi
+
+# Click prevention is in the player's audio path until the player restarts,
+# whatever this update replaced: without its program nothing would play.
+if [ "$KEEPALIVE_ON" = 1 ]; then
+  systemctl start "$KEEPALIVE_SERVICE.service" 2>/dev/null || true
+  sleep 2
+  if systemctl is-active --quiet "$KEEPALIVE_SERVICE.service" 2>/dev/null; then
+    echo "Click prevention is running the new version"
+  else
+    echo "WARNING: click prevention did not start again; nothing will play until the player has restarted"
   fi
 fi
 

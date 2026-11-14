@@ -2,6 +2,13 @@
 
 All notable changes to the Audiophonics Evo Sabre plugin are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.99.3] - 2026-11-14
+
+- **Click prevention plays on a player with Volumio's multiroom in its audio path.** With the switch on, nothing played, the startup sound included: Volumio's multiroom switcher refused the program behind Click prevention as its output. The music now reaches that program through a pass-through the switcher accepts; every sample arrives as it was sent.
+- **Switching Click prevention on or off no longer moves the volume or leaves the player showing itself muted.** Volumio restores its stored mixer settings whenever its audio path is rebuilt; the volume and the mute the player had are now put back afterwards.
+- An update while Click prevention is on starts its program again, instead of leaving the player silent until it restarts.
+- The settings page and the README say how to have this display and the DAC's own show the same volume: Volume Curve Mode on Linear.
+
 ## [2.99.2] - 2026-11-14
 
 - **Updating over version 2 no longer leaves the display dark until the player restarts.** Version 2's display took the display's two GPIO lines through `/sys/class/gpio` and did not give them back when it stopped, so the new display was refused them. The installer now releases those two lines, and only those.
