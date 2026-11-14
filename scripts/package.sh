@@ -2,14 +2,16 @@
 # Assemble a plugin's zip as Volumio's plugin manager takes it: the plugin's
 # files at the root, its program under bin/, and the components it ships
 # from their own releases (scripts/fetch-components.sh). Output:
-# dist/<store name>-<version>.zip.
+# dist/<plugin>-<version>.zip, <plugin> being its folder under plugins/,
+# which is its folder in Volumio's plugin sources: the zip unpacks into that
+# folder as it is.
 #
 # The zip carries no node modules: `volumio plugin install` installs a
 # plugin's dependencies on the player, and the plugin store refuses a
 # package that brings its own.
 #
 #   scripts/package.sh              every plugin
-#   scripts/package.sh evo_sabre    the ones named
+#   scripts/package.sh audiophonics_evosabre    the ones named
 #
 # Run scripts/ship.sh first: it builds the program this puts in the zip.
 set -euo pipefail
@@ -32,11 +34,10 @@ for plugin in "${plugins[@]}"; do
   COMPONENTS=
   . "plugins/$plugin/build.conf"
   version=$(sed -n 's/^version = "\(.*\)"/\1/p' "bins/$CRATE/Cargo.toml" | head -n1)
-  name=$(sed -n 's/^ *"name": "\(.*\)",*$/\1/p' "plugins/$plugin/package.json" | head -n1)
   bin="target/ship/$plugin/bin/$CRATE"
   [ -x "$bin" ] || { echo "package: $bin is not built; run scripts/ship.sh $plugin first" >&2; exit 1; }
 
-  stage="dist/stage/$name"
+  stage="dist/stage/$plugin"
   rm -rf dist/stage
   mkdir -p "$stage"
   cp -r "plugins/$plugin/." "$stage/"
@@ -68,7 +69,7 @@ for plugin in "${plugins[@]}"; do
     "$(git rev-parse --short HEAD 2>/dev/null || echo unknown)" \
     "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$shipped" > "$stage/build.json"
 
-  zip="dist/$name-$version.zip"
+  zip="dist/$plugin-$version.zip"
   rm -f "$zip"
   ( cd "$stage" && zip -qr "$ROOT/$zip" . )
   rm -rf dist/stage

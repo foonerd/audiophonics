@@ -2,7 +2,7 @@
 # folder under plugins/: the check, the program built for the player, the
 # plugin's zip and its digest, published as a GitHub release.
 #
-#   git tag evo_sabre-v2.99.0 && git push origin evo_sabre-v2.99.0
+#   git tag audiophonics_evosabre-v3.0.0 && git push origin audiophonics_evosabre-v3.0.0
 #
 # Run by hand, it does all of that for the plugin named and stops short of
 # publishing, so a tag is never spent finding out that the release is broken.
@@ -16,7 +16,7 @@ on:
       plugin:
         description: The plugin to build without publishing, a folder under plugins/
         required: true
-        default: evo_sabre
+        default: audiophonics_evosabre
 
 permissions:
   contents: write

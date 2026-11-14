@@ -20,7 +20,7 @@ RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --locked
 
 echo "check: renders"
 # Every screen a display draws, from the code that draws the glass.
-cargo run -q --locked -p evosabre-panel -- --render target/renders/evo_sabre --assets plugins/evo_sabre/assets >/dev/null
+cargo run -q --locked -p evosabre-panel -- --render target/renders/audiophonics_evosabre --assets plugins/audiophonics_evosabre/assets >/dev/null
 
 echo "check: shell scripts"
 for script in scripts/*.sh; do

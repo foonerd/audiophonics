@@ -6,7 +6,7 @@
 # rather than done; what they write is looked at.
 #
 #   scripts/installers.sh              every plugin that has a sandbox
-#   scripts/installers.sh evo_sabre    the ones named
+#   scripts/installers.sh audiophonics_evosabre    the ones named
 #
 # A plugin's sandbox is plugins/<plugin>/test/sandbox.sh, which runs inside
 # the container with the plugin's files at /src.

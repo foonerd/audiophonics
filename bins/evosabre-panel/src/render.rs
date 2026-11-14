@@ -218,7 +218,7 @@ mod tests {
     fn the_logo_and_the_font_the_plugin_ships_are_usable() {
         let assets = concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../plugins/evo_sabre/assets"
+            "/../../plugins/audiophonics_evosabre/assets"
         );
         let logo = std::fs::read(format!("{assets}/logo.pgm")).unwrap();
         let frame = greeting::parse_pgm(&logo).unwrap();

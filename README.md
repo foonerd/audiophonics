@@ -6,9 +6,11 @@ Each plugin ships a small native program written in Rust and a thin plugin aroun
 
 ## Plugins
 
-| Plugin | Store name | Hardware | Status |
-| --- | --- | --- | --- |
-| [Evo Sabre](plugins/evo_sabre/README.md) | `audiophonics_evo_sabre` | EVO Sabre: second OLED display, remote | 3.0.0, a rewrite of version 2 |
+| Plugin | Folder | Store name | Hardware | Status |
+| --- | --- | --- | --- | --- |
+| [Evo Sabre](plugins/audiophonics_evosabre/README.md) | `audiophonics_evosabre` | `audiophonics_evo_sabre` | EVO Sabre: second OLED display, remote | 3.0.0, a rewrite of version 2 |
+
+A plugin has two names, and they need not be the same word. Its **folder** under `plugins/` is its folder in Volumio's plugin sources, [volumio-plugins-sources-bookworm](https://github.com/volumio/volumio-plugins-sources-bookworm); a release's tag and zip carry it. Its **store name** is the `name` in its `package.json`: what the plugin store lists it under and where a player installs it, `/data/plugins/<category>/<store name>`. A version of a plugin the store already has keeps both.
 
 ## Supported boards
 
@@ -16,7 +18,7 @@ Raspberry Pi 4 and Raspberry Pi 5, and the Compute Module 4 and 5 on a carrier b
 
 ## What is where
 
-    plugins/     one folder per plugin: its Volumio side, its settings page, its installer
+    plugins/     one folder per plugin, named as in Volumio's plugin sources: its Volumio side, its settings page, its installer
     bins/        the programs the plugins ship, one per product
     crates/      what the programs share: the player, the remote, the journal and the settings
     components/  what a plugin ships from another project's release, by version
@@ -40,7 +42,7 @@ Then, from the repository's root:
 
 A plugin may ship a program this repository does not build. Each is named in `components/<name>.lock` with its version and comes from its own GitHub release; `scripts/package.sh` fetches it (`scripts/fetch-components.sh`) and puts nothing of it in a zip before the release's checksums have been verified against their Ed25519 signature with `keys/release-signing.pub`, the archive against the checksums, and the archive's own manifest against its signature and its files. Packaging therefore needs the network once per version.
 
-`scripts/ship.sh` and `scripts/package.sh` take plugin names to do less: `scripts/ship.sh evo_sabre`. With `qemu-user` installed, `ship.sh` runs each ARM binary and checks that it draws the same pixels as the host's build.
+`scripts/ship.sh` and `scripts/package.sh` take plugin names to do less: `scripts/ship.sh audiophonics_evosabre`. With `qemu-user` installed, `ship.sh` runs each ARM binary and checks that it draws the same pixels as the host's build.
 
 The plugins' own checks run under Node 20; where Node is not installed they run in the `node:20-slim` container. Each plugin's `install.sh` and `uninstall.sh` are run for real in a Debian bookworm container laid out like a player (`scripts/installers.sh`): a fresh install, an install over the previous version, a second install and an uninstall. Both need Docker.
 
@@ -48,7 +50,7 @@ The plugins' own checks run under Node 20; where Node is not installed they run 
 
 Every screen a display draws can be written out as an image by the code that draws the glass:
 
-    cargo run -p evosabre-panel -- --render target/renders/evo_sabre --assets plugins/evo_sabre/assets
+    cargo run -p evosabre-panel -- --render target/renders/audiophonics_evosabre --assets plugins/audiophonics_evosabre/assets
 
 The files are binary PGM, 256 x 64. `magick playing.pgm -filter point -resize 400% playing.png` makes one easy to look at.
 
@@ -56,9 +58,9 @@ The files are binary PGM, 256 x 64. `magick playing.pgm -filter point -resize 40
 
 Copy the zip to the player and install it as any plugin zip:
 
-    scp dist/audiophonics_evo_sabre-3.0.0.zip volumio@volumio.local:
+    scp dist/audiophonics_evosabre-3.0.0.zip volumio@volumio.local:
     ssh volumio@volumio.local
-    mkdir evo && cd evo && miniunzip ../audiophonics_evo_sabre-3.0.0.zip && volumio plugin install
+    mkdir evo && cd evo && miniunzip ../audiophonics_evosabre-3.0.0.zip && volumio plugin install
 
 `volumio plugin install` installs the plugin's Node dependencies on the player, so the player needs the network for it; the zip carries no `node_modules`, as the plugin store requires.
 
@@ -66,9 +68,9 @@ A plugin that changes the boot configuration says so when it is installed; resta
 
 ## Releases
 
-A release is one plugin at one version. Its tag is the plugin's folder and the version, `evo_sabre-v3.0.0`, and the version is the one its program carries in `bins/<program>/Cargo.toml`; the plugin's `package.json` and `CHANGELOG.md` must agree, and the check says so when they do not.
+A release is one plugin at one version. Its tag is the plugin's folder and the version, `audiophonics_evosabre-v3.0.0`, and the version is the one its program carries in `bins/<program>/Cargo.toml`; the plugin's `package.json` and `CHANGELOG.md` must agree, and the check says so when they do not.
 
-    git tag evo_sabre-v3.0.0 && git push origin evo_sabre-v3.0.0
+    git tag audiophonics_evosabre-v3.0.0 && git push origin audiophonics_evosabre-v3.0.0
 
 A new major version is numbered below itself while it is on the bench: the builds of what became 3.0.0 were 2.99.0, 2.99.1 and so on, and the round number is kept for the first build that has run on the unit and been accepted by the plugin store.
 
@@ -76,7 +78,7 @@ A release to the store carries its settings page in English and in German, Spani
 
 The tag runs the check, builds the program, packages the plugin and publishes the zip with its SHA-256 as a pre-release, with that version's section of the plugin's changelog as the notes. A build for the bench stays a pre-release; a release to the store becomes the latest release once its zip has been looked at:
 
-    gh release edit evo_sabre-v3.0.0 --prerelease=false --latest
+    gh release edit audiophonics_evosabre-v3.0.0 --prerelease=false --latest
 
 The release workflow can also be run by hand for a plugin; it then builds everything and publishes nothing.
 

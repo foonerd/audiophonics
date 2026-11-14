@@ -4,7 +4,7 @@
 # panel's size. The panel shows eight-bit grey on its own sixteen levels,
 # so the mark's soft edges survive.
 #
-#   scripts/greeting.sh "EVO SABRE" plugins/evo_sabre/assets/logo.pgm
+#   scripts/greeting.sh "EVO SABRE" plugins/audiophonics_evosabre/assets/logo.pgm
 #
 # Needs ImageMagick 7 and the DejaVu Sans face. The result is committed:
 # run this when the mark or a product's name changes.

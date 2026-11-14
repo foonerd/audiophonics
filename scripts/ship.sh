@@ -5,7 +5,7 @@
 # Players run these files; they do not run cargo.
 #
 #   scripts/ship.sh              every plugin
-#   scripts/ship.sh evo_sabre    the ones named
+#   scripts/ship.sh audiophonics_evosabre    the ones named
 #
 # Needs the cross linker of .cargo/config.toml (gcc-arm-linux-gnueabihf) and
 # the pinned toolchain. With qemu-arm at hand, each binary is also run: it
