@@ -6,6 +6,7 @@
 use crate::config::Config;
 use crate::frame::{self, Frame};
 use crate::greeting;
+use crate::grey;
 use crate::layout::{self, Playing};
 use crate::unifont::Unifont;
 use audiophonics_base::clock::LocalTime;
@@ -34,7 +35,7 @@ fn pgm(frame: &Frame) -> Vec<u8> {
     let mut out = format!("P5\n{} {}\n255\n", frame::WIDTH, frame::HEIGHT).into_bytes();
     for y in 0..frame::HEIGHT {
         for x in 0..frame::WIDTH {
-            out.push(frame.get(x, y) * 17);
+            out.push(grey::brightness(frame.get(x, y)));
         }
     }
     out

@@ -10,6 +10,7 @@
 //! named and leaves its default too: the panel comes up on a damaged store
 //! and says in the journal what was wrong with it.
 
+use crate::grey;
 use audiophonics_base::log::Level;
 use audiophonics_base::settings::Store;
 use std::time::Duration;
@@ -19,11 +20,12 @@ pub const DEFAULT_PATH: &str =
 const PLUGIN_DIR: &str = "/data/plugins/system_hardware/audiophonics_evo_sabre";
 
 /// The segments of the clock's digits that are not lit: left dark, or
-/// drawn in one of the panel's two faintest greys, as the ghost of an LED
+/// drawn in one of the panel's three faintest greys, as the ghost of an LED
 /// digit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Unlit {
     Off,
+    VeryFaint,
     Faint,
     Dim,
 }
@@ -32,19 +34,21 @@ impl Unlit {
     pub fn parse(s: &str) -> Option<Self> {
         match s.trim() {
             "off" => Some(Self::Off),
+            "very_faint" => Some(Self::VeryFaint),
             "faint" => Some(Self::Faint),
             "dim" => Some(Self::Dim),
             _ => None,
         }
     }
 
-    /// The grey to draw them in. One is the level the panel's grey scale
-    /// gives a quarter of the next one's light; see `ssd1322::GREYS`.
+    /// The grey to draw them in: the two levels under the linear scale,
+    /// or the linear scale's first visible step.
     pub fn level(self) -> u8 {
         match self {
             Self::Off => 0,
-            Self::Faint => 1,
-            Self::Dim => 2,
+            Self::VeryFaint => grey::TRACE,
+            Self::Faint => grey::FAINT,
+            Self::Dim => grey::linear(2),
         }
     }
 }
@@ -208,7 +212,9 @@ pub fn from_store(store: &Store) -> (Config, Vec<String>) {
     if let Some(v) = store.text("clock_segments") {
         match Unlit::parse(&v) {
             Some(unlit) => c.clock_segments = unlit,
-            None => problems.push(format!("clock_segments: not off, faint or dim: {v}")),
+            None => problems.push(format!(
+                "clock_segments: not off, very_faint, faint or dim: {v}"
+            )),
         }
     }
 

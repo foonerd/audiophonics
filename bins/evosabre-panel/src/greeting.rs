@@ -16,6 +16,7 @@
 
 use crate::config::Config;
 use crate::frame::{self, Frame};
+use crate::grey;
 use embedded_graphics::mono_font::iso_8859_1::FONT_10X20;
 use embedded_graphics::mono_font::MonoTextStyle;
 use embedded_graphics::pixelcolor::Gray4;
@@ -105,8 +106,12 @@ pub fn parse_pgm(bytes: &[u8]) -> Result<Frame, String> {
 
     let mut f = Frame::new();
     for (i, &v) in raster.iter().enumerate() {
-        let luma = ((v as u32 * 15 + maxval / 2) / maxval) as u8;
-        f.set(i as u32 % frame::WIDTH, i as u32 / frame::WIDTH, luma);
+        let sixteenth = ((v as u32 * 15 + maxval / 2) / maxval) as u8;
+        f.set(
+            i as u32 % frame::WIDTH,
+            i as u32 / frame::WIDTH,
+            grey::linear(sixteenth),
+        );
     }
     Ok(f)
 }
@@ -156,14 +161,17 @@ mod tests {
         let f = parse_pgm(&pgm(256, 64, 255, true)).unwrap();
         assert_eq!(f.get(0, 0), 0);
         assert_eq!(f.get(255, 0), 15);
-        assert_eq!(f.get(128, 0), ((128u32 * 15 + 127) / 255) as u8);
+        assert_eq!(
+            f.get(128, 0),
+            grey::linear(((128u32 * 15 + 127) / 255) as u8)
+        );
     }
 
     #[test]
     fn a_smaller_maxval_scales_too() {
         let f = parse_pgm(&pgm(256, 64, 15, false)).unwrap();
         assert_eq!(f.get(15, 0), 15);
-        assert_eq!(f.get(7, 0), 7);
+        assert_eq!(f.get(7, 0), grey::linear(7));
     }
 
     #[test]

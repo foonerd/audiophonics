@@ -2,6 +2,10 @@
 
 All notable changes to the Audiophonics Evo Sabre plugin are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.99.5] - 2026-11-14
+
+- **Clock digits: unlit segments** gains Very faint, between Dark and Faint. The display now has two greys under its ordinary scale, one and two ticks of its clock where the ordinary scale starts at eight.
+
 ## [2.99.4] - 2026-11-14
 
 - **The clock is easier to read.** The segments of its digits that are not lit were drawn in the faintest grey the display's standard grey scale has, which beside the lit ones was still too bright. The display now has one fainter grey, a quarter of that, and the unlit segments use it.

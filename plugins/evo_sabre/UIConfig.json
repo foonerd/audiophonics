@@ -86,6 +86,10 @@
                             "label": "TRANSLATE.EVOSABRE.CLOCK_SEGMENTS_OFF"
                         },
                         {
+                            "value": "very_faint",
+                            "label": "TRANSLATE.EVOSABRE.CLOCK_SEGMENTS_VERY_FAINT"
+                        },
+                        {
                             "value": "faint",
                             "label": "TRANSLATE.EVOSABRE.CLOCK_SEGMENTS_FAINT"
                         },

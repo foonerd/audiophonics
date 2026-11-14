@@ -8,6 +8,7 @@
 
 use crate::config::Config;
 use crate::frame::{self, Frame};
+use crate::grey;
 use gpio_cdev::{Chip, Line, LineHandle, LineRequestFlags};
 use spidev::{SpiModeFlags, Spidev, SpidevOptions};
 use std::io::Write;
@@ -16,14 +17,6 @@ use std::time::Duration;
 
 const CONSUMER: &str = "evosabre-panel";
 
-/// The grey scale: how long each of the fifteen levels above black is
-/// driven, in ticks of the controller's display clock. From the second
-/// level up this is the controller's own linear table, eight ticks a level.
-/// That table leaves the first level dark, so the faintest grey it has is
-/// the second. Here the first is driven for two ticks, a quarter of the
-/// second: one grey fainter than the linear table can show, and every other
-/// level as it was.
-pub const GREYS: [u8; 15] = [2, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112];
 const BUFSIZ_PARAM: &str = "/sys/module/spidev/parameters/bufsiz";
 const DEFAULT_BUFSIZ: usize = 4096;
 
@@ -116,7 +109,7 @@ impl Ssd1322 {
         self.command(0xB4, &[0xA0, 0xFD])?; // display enhancement A: external VSL
         self.command(0xC1, &[contrast])?; // contrast current
         self.command(0xC7, &[0x0F])?; // master current: full
-        self.command(0xB8, &GREYS)?; // grey scale table
+        self.command(0xB8, &grey::TICKS)?; // grey scale table
         self.command(0x00, &[])?; // and the command that puts it to use
         self.command(0xB1, &[0xE2])?; // phase length
         self.command(0xD1, &[0x82, 0x20])?; // display enhancement B
@@ -246,18 +239,6 @@ fn held_by(consumer: Option<&str>, used: bool) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// The controller takes a table only if each level is driven longer
-    /// than the one before, and none for more than 180 ticks.
-    #[test]
-    fn the_grey_scale_rises_and_keeps_the_linear_table_from_the_second_level() {
-        assert!(GREYS.windows(2).all(|pair| pair[0] < pair[1]));
-        assert!(GREYS.iter().all(|&ticks| ticks <= 180));
-        assert!(GREYS[0] > 0, "the first level is lit");
-        for (i, &ticks) in GREYS.iter().enumerate().skip(1) {
-            assert_eq!(usize::from(ticks), 8 * i, "level {}", i + 1);
-        }
-    }
 
     #[test]
     fn a_refused_line_names_whoever_holds_it() {

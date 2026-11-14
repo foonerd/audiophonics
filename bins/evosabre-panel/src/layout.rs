@@ -6,6 +6,7 @@
 //! artist, then the album, with the chrome quieter than any of them.
 
 use crate::frame::Frame;
+use crate::grey;
 use crate::icons;
 use crate::scroll::Marquee;
 use crate::segments;
@@ -17,15 +18,15 @@ use embedded_graphics::mono_font::iso_8859_1::{FONT_5X8, FONT_6X10, FONT_7X13, F
 use embedded_graphics::mono_font::MonoFont;
 use std::time::{Duration, Instant};
 
-pub const TITLE: u8 = 15;
-pub const ARTIST: u8 = 11;
-pub const ALBUM: u8 = 8;
-pub const CHROME: u8 = 10;
-pub const ICON: u8 = 12;
-pub const QUIET: u8 = 6;
-pub const HAIRLINE: u8 = 5;
-pub const BAR_TRACK: u8 = 3;
-pub const BAR_FILL: u8 = 12;
+pub const TITLE: u8 = grey::linear(15);
+pub const ARTIST: u8 = grey::linear(11);
+pub const ALBUM: u8 = grey::linear(8);
+pub const CHROME: u8 = grey::linear(10);
+pub const ICON: u8 = grey::linear(12);
+pub const QUIET: u8 = grey::linear(6);
+pub const HAIRLINE: u8 = grey::linear(5);
+pub const BAR_TRACK: u8 = grey::linear(3);
+pub const BAR_FILL: u8 = grey::linear(12);
 
 /// The picture's width: one less than the panel, as is its height, so the
 /// orbit has a spare column and row.
@@ -443,7 +444,7 @@ pub mod tests {
             bitdepth: "16 bit".into(),
             ..State::default()
         };
-        clock(&mut f, &stopped, "192.168.1.42", &wednesday(), 1);
+        clock(&mut f, &stopped, "192.168.1.42", &wednesday(), grey::FAINT);
         assert!(
             (4..24).any(|x| (15..55).any(|y| f.get(x, y) == ICON)),
             "first digit"

@@ -25,6 +25,7 @@ mod config;
 mod farewell;
 mod frame;
 mod greeting;
+mod grey;
 mod icons;
 mod keys;
 mod layout;
