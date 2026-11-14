@@ -150,6 +150,33 @@
             ]
         },
         {
+            "id": "section_sound",
+            "element": "section",
+            "label": "TRANSLATE.EVOSABRE.SECTION_SOUND",
+            "icon": "fa-volume-off",
+            "description": "TRANSLATE.EVOSABRE.SECTION_SOUND_DOC",
+            "onSave": {
+                "type": "controller",
+                "endpoint": "system_hardware/audiophonics_evo_sabre",
+                "method": "saveSound"
+            },
+            "saveButton": {
+                "label": "TRANSLATE.EVOSABRE.SAVE",
+                "data": [
+                    "click_prevention"
+                ]
+            },
+            "content": [
+                {
+                    "id": "click_prevention",
+                    "element": "switch",
+                    "label": "TRANSLATE.EVOSABRE.CLICK_PREVENTION",
+                    "doc": "TRANSLATE.EVOSABRE.CLICK_PREVENTION_DOC",
+                    "value": false
+                }
+            ]
+        },
+        {
             "id": "section_dac",
             "element": "section",
             "label": "TRANSLATE.EVOSABRE.SECTION_DAC",

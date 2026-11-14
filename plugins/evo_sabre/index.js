@@ -4,6 +4,10 @@
 // the display's service, and the word to the display that the player is
 // going down. The program the service runs (bin/evosabre-panel) draws the
 // glass and reads the remote; this file touches neither.
+//
+// It also switches click prevention: a daemon that holds the audio output
+// open (keepalive/audio-keepalive-daemon), and the contribution that puts
+// it into the player's ALSA chain.
 
 var libQ = require('kew');
 var fs = require('fs-extra');
@@ -11,8 +15,12 @@ var path = require('path');
 var exec = require('child_process').exec;
 var remote = require('./lib/remote');
 var form = require('./lib/form');
+var keepalive = require('./lib/keepalive');
 
 var SERVICE = 'evosabre-panel.service';
+var KEEPALIVE_SERVICE = 'evosabre-keepalive.service';
+var ASOUND_DIR = path.join(__dirname, 'asound');
+var ASOUND_FILE = '/etc/asound.conf';
 var REMOTE_STATUS = '/run/evosabre-panel/remote.json';
 var USERCONFIG = '/boot/userconfig.txt';
 var SPI_DEVICE = '/dev/spidev0.0';
@@ -28,6 +36,7 @@ function EvoSabre(context) {
     this.logger = context.logger;
     this.configManager = context.configManager;
     this.reloadTimer = null;
+    this.chainTimer = null;
 }
 
 EvoSabre.prototype.onVolumioStart = function () {
@@ -49,13 +58,17 @@ EvoSabre.prototype.onStart = function () {
     // cannot come up is said on the page, and the settings stay reachable.
     return self.applyService().then(function () {
         self.askRestartIfNeeded();
+        return self.applyClickPrevention();
     });
 };
 
 EvoSabre.prototype.onStop = function () {
     var self = this;
     if (self.reloadTimer) { clearTimeout(self.reloadTimer); self.reloadTimer = null; }
-    return self.systemctl('disable --now').fail(function () { /* said in the log */ });
+    if (self.chainTimer) { clearTimeout(self.chainTimer); self.chainTimer = null; }
+    return self.systemctl('disable --now')
+        .fail(function () { /* said in the log */ })
+        .then(function () { return self.dropClickPrevention(); });
 };
 
 EvoSabre.prototype.onRestart = function () { };
@@ -84,10 +97,10 @@ EvoSabre.prototype.farewell = function (signal) {
 // The display's service.
 // -----------------------------------------------------------------------------
 
-EvoSabre.prototype.systemctl = function (verb) {
+EvoSabre.prototype.systemctl = function (verb, service) {
     var self = this;
     var defer = libQ.defer();
-    exec('/usr/bin/sudo /bin/systemctl ' + verb + ' ' + SERVICE, { uid: 1000, gid: 1000 }, function (error, stdout, stderr) {
+    exec('/usr/bin/sudo /bin/systemctl ' + verb + ' ' + (service || SERVICE), { uid: 1000, gid: 1000 }, function (error, stdout, stderr) {
         if (error) {
             self.logger.error(id + 'systemctl ' + verb + ': ' + String(stderr || error).trim());
             defer.reject(new Error(String(stderr || error.message || error).trim()));
@@ -169,6 +182,107 @@ EvoSabre.prototype.askRestartIfNeeded = function () {
 };
 
 // -----------------------------------------------------------------------------
+// Click prevention: the audio output held open, so the DAC's clocks do not
+// stop between tracks.
+// -----------------------------------------------------------------------------
+
+// Volumio's ALSA configuration, written again from every plugin's
+// contribution. Resolves whatever becomes of it: the page says the rest.
+EvoSabre.prototype.rebuildAlsa = function () {
+    var self = this;
+    var defer = libQ.defer();
+    var done = false;
+    var finish = function () { if (!done) { done = true; defer.resolve(); } };
+    var asked;
+    try {
+        asked = self.commandRouter.executeOnPlugin('audio_interface', 'alsa_controller', 'updateALSAConfigFile');
+    } catch (e) {
+        self.logger.error(id + 'updateALSAConfigFile: ' + e);
+        finish();
+        return defer.promise;
+    }
+    if (asked && typeof asked.then === 'function') {
+        asked.then(finish).fail(finish);
+    } else {
+        finish();
+    }
+    return defer.promise;
+};
+
+// Out of the chain: the daemon stopped, the contribution gone, the
+// configuration written without it.
+EvoSabre.prototype.dropClickPrevention = function () {
+    var self = this;
+    var file = path.join(ASOUND_DIR, keepalive.CONTRIBUTION);
+    return self.systemctl('stop', KEEPALIVE_SERVICE)
+        .fail(function () { /* not running */ })
+        .then(function () {
+            if (!fs.existsSync(file)) {
+                return libQ.resolve();
+            }
+            try { fs.unlinkSync(file); } catch (e) { self.logger.error(id + file + ': ' + e.message); }
+            return self.rebuildAlsa();
+        });
+};
+
+// The switch as it stands: on, the contribution is written, the
+// configuration rebuilt around it and the daemon started; off, all three
+// are undone. Where the Audio Keepalive plugin already holds the output
+// open, nothing is put behind it.
+EvoSabre.prototype.applyClickPrevention = function () {
+    var self = this;
+    var name = self.commandRouter.getI18nString('EVOSABRE.PLUGIN_NAME');
+    if (!form.isOn(self.config.get('click_prevention'), false)) {
+        return self.dropClickPrevention();
+    }
+    if (keepalive.standaloneOn()) {
+        self.commandRouter.pushToastMessage('info', name, self.commandRouter.getI18nString('EVOSABRE.CLICK_STANDALONE'));
+        return self.dropClickPrevention();
+    }
+    try {
+        fs.ensureDirSync(ASOUND_DIR);
+        fs.writeFileSync(path.join(ASOUND_DIR, keepalive.CONTRIBUTION), keepalive.contribution(__dirname), 'utf8');
+    } catch (e) {
+        self.logger.error(id + 'click prevention: ' + e.message);
+        self.commandRouter.pushToastMessage('error', name,
+            self.commandRouter.getI18nString('EVOSABRE.CLICK_FAILED').replace('{{error}}', e.message));
+        return libQ.resolve();
+    }
+    return self.rebuildAlsa()
+        .then(function () { return self.systemctl('restart', KEEPALIVE_SERVICE); })
+        .then(function () { self.checkChain(); })
+        .fail(function (e) {
+            self.commandRouter.pushToastMessage('error', name,
+                self.commandRouter.getI18nString('EVOSABRE.CLICK_FAILED').replace('{{error}}', e && e.message ? e.message : e));
+        });
+};
+
+// Volumio asks for contributions only from the plugins it knew when it
+// started: one installed since joins the chain after a restart. Looked at a
+// moment after the rebuild, and asked for once.
+EvoSabre.prototype.checkChain = function () {
+    var self = this;
+    if (self.chainTimer) { clearTimeout(self.chainTimer); }
+    self.chainTimer = setTimeout(function () {
+        self.chainTimer = null;
+        var asound = '';
+        try { asound = fs.readFileSync(ASOUND_FILE, 'utf8'); } catch (e) { /* not written yet */ }
+        if (keepalive.inChain(asound)) {
+            return;
+        }
+        self.commandRouter.broadcastMessage('openModal', {
+            title: self.commandRouter.getI18nString('EVOSABRE.CLICK_RESTART_TITLE'),
+            message: self.commandRouter.getI18nString('EVOSABRE.CLICK_RESTART_MSG'),
+            size: 'lg',
+            buttons: [
+                { name: self.commandRouter.getI18nString('COMMON.RESTART'), class: 'btn btn-info', emit: 'reboot', payload: '' },
+                { name: self.commandRouter.getI18nString('COMMON.CONTINUE'), class: 'btn btn-default', emit: 'closeModals', payload: '' }
+            ]
+        });
+    }, 5000);
+};
+
+// -----------------------------------------------------------------------------
 // The settings page.
 // -----------------------------------------------------------------------------
 
@@ -236,6 +350,13 @@ EvoSabre.prototype.saveDisplay = function (data) {
 EvoSabre.prototype.saveRemote = function (data) {
     if (this.save(data, ['remote_active'])) {
         this.reloadDisplay();
+    }
+    return libQ.resolve();
+};
+
+EvoSabre.prototype.saveSound = function (data) {
+    if (this.save(data, ['click_prevention'])) {
+        return this.applyClickPrevention();
     }
     return libQ.resolve();
 };

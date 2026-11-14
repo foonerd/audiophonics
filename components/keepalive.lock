@@ -1,0 +1,11 @@
+# Audio Keepalive: the daemon that owns the output so its clocks never stop,
+# and the ALSA client the players write through. Shipped from its own
+# release and verified against the evo release key (keys/release-signing.pub)
+# before anything of it is packed.
+NAME=audio_keepalive
+VERSION=2.1.1
+REPOSITORY=foonerd/alsa-pcm-keepalive
+# What a plugin takes from the release: the file there, where it goes in the
+# plugin, and its mode. The arm build is the one for Volumio's Raspberry Pi
+# image.
+FILES="bin/arm/audio-keepalive-daemon:keepalive/audio-keepalive-daemon:755 asound/arm/libasound_module_pcm_keepalive.so:keepalive/libasound_module_pcm_keepalive.so:644 LICENSE:keepalive/LICENSE:644"

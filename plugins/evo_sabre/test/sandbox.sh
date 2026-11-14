@@ -48,7 +48,8 @@ player() {
   rm -f /boot/config.txt /boot/volumioconfig.txt "$USERCONFIG"
   mkdir -p "$PLUGIN/bin" "$ACTIVE" /boot /etc/systemd/system /etc/udev/rules.d /etc/sudoers.d
   cp -r /src/. "$PLUGIN/"
-  printf '#!/bin/sh\necho "evosabre-panel 2.99.0"\n' > "$PLUGIN/bin/evosabre-panel"
+  printf '#!/bin/sh\necho "evosabre-panel 2.99.1"\n' > "$PLUGIN/bin/evosabre-panel"
+  printf '#!/bin/sh\necho "audio-keepalive-daemon 2.1.1"\n' > "$PLUGIN/keepalive/audio-keepalive-daemon"
   printf 'dtparam=audio=on\n' > /boot/config.txt
   : > "$CALLS"
 }
@@ -77,6 +78,10 @@ JSON
 
 installed() {
   [ -f /etc/systemd/system/evosabre-panel.service ] || fail "$1: the unit is not installed"
+  [ -f /etc/systemd/system/evosabre-keepalive.service ] || fail "$1: click prevention's unit is not installed"
+  grep -q "restart evosabre-keepalive.service" /etc/sudoers.d/volumio-user-audiophonics_evo_sabre || fail "$1: the plugin may not start click prevention"
+  [ -x "$PLUGIN/keepalive/audio-keepalive-daemon" ] || fail "$1: click prevention's program is not executable"
+  grep -q "systemctl enable.*evosabre-keepalive" "$CALLS" && fail "$1: click prevention was enabled by the installer"
   [ -f /etc/udev/rules.d/70-evosabre-remote.rules ] || fail "$1: the udev rule is not installed"
   [ "$(stat -c %a /etc/sudoers.d/volumio-user-audiophonics_evo_sabre)" = 440 ] || fail "$1: the sudoers entry is not 0440"
   [ "$(stat -c %U "$PLUGIN/index.js")" = volumio ] || fail "$1: the plugin folder is not volumio's"
@@ -116,10 +121,11 @@ out=$(sh "$PLUGIN/uninstall.sh")
 echo "$out" | grep -q "^pluginuninstallend$" || fail "uninstall: did not finish: $out"
 [ "$(cat "$USERCONFIG")" = 'dtoverlay=hifiberry-dac
 # mine' ] || fail "uninstall: the boot configuration is not as it was"
-for left in /etc/systemd/system/evosabre-panel.service /etc/udev/rules.d/70-evosabre-remote.rules /etc/sudoers.d/volumio-user-audiophonics_evo_sabre; do
+for left in /etc/systemd/system/evosabre-panel.service /etc/systemd/system/evosabre-keepalive.service /etc/udev/rules.d/70-evosabre-remote.rules /etc/sudoers.d/volumio-user-audiophonics_evo_sabre; do
   [ ! -e "$left" ] || fail "uninstall: $left is still there"
 done
 grep -q "^systemctl disable evosabre-panel.service" "$CALLS" || fail "uninstall: the service was not disabled"
+grep -q "^systemctl stop evosabre-keepalive.service" "$CALLS" || fail "uninstall: click prevention was not stopped"
 echo "ok: the uninstall takes back the unit, the rules, the sudoers entry and the block"
 
 # --- A last line with no end is not joined to the block's mark. --------------
@@ -188,6 +194,15 @@ sh "$PLUGIN/install.sh" > /dev/null
 [ "$(grep -c '^dtoverlay=gpio-ir' "$USERCONFIG")" = 1 ] || fail "variant: the receiver's overlay is there twice"
 grep -q "^dtparam=spi=on$" "$USERCONFIG" || fail "variant: the SPI bus is not switched on"
 echo "ok: a receiver overlay already there is not written a second time"
+
+# --- Click prevention's program not running here is said, not refused. -------
+player
+printf '#!/bin/sh\nexit 127\n' > "$PLUGIN/keepalive/audio-keepalive-daemon"
+out=$(sh "$PLUGIN/install.sh")
+echo "$out" | grep -q "^plugininstallend$" || fail "keepalive: the install did not finish: $out"
+echo "$out" | grep -q "click prevention program does not run" || fail "keepalive: no word about it: $out"
+installed keepalive
+echo "ok: a click prevention program that does not run here is said, and the plugin still installs"
 
 # --- A program that does not run is refused, and nothing is left. ------------
 player

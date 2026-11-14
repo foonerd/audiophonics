@@ -40,9 +40,18 @@ Installing over version 2 of the plugin replaces it and starts the new display a
 | Dark after | Seconds after the last key, while nothing plays, before the display goes dark. 0 never goes dark. |
 | Obey the transport keys | Off leaves the remote to the DAC board alone. |
 | Check the remote | Says whether the receiver is being read and which key arrived last. |
+| Click prevention | Holds the audio output open so the DAC's clocks never stop between tracks. Off unless you switch it on. |
 | Detail | How much the display's program writes to the journal. |
 
 Settings take effect when saved.
+
+## Click prevention
+
+Switch this on if the DAC clicks, or loses the first moment of a track, when playback starts or resumes. Leave it off if you hear no clicks.
+
+The DAC takes its clocks from the Raspberry Pi. On a Raspberry Pi 5 they run only while something plays, so the DAC has to lock on to them again at every start. With Click prevention on, a small program, Audio Keepalive, takes over the audio output and holds it open: the music passes through untouched, and while nothing plays it sends noise far too quiet to hear, so the clocks never stop. A change of sample rate still reopens the output.
+
+After the plugin is installed or updated, Click prevention joins the player's audio path once the player has restarted; the plugin asks when that is needed. If the Audio Keepalive plugin is installed and switched on, it already does this for every output, and Click prevention leaves it to.
 
 ## Setting up the DAC
 
@@ -68,7 +77,7 @@ It says which board it found, how it opened the display, what the player is doin
 
 ## What it installs
 
-Outside its own folder, the plugin installs a systemd unit (`evosabre-panel.service`), udev rules for the receiver's decoder and its device, a sudoers entry for switching the service, and a marked block of two lines in `/boot/userconfig.txt`. Uninstalling removes all four.
+Outside its own folder, the plugin installs two systemd units (`evosabre-panel.service` for the display, `evosabre-keepalive.service` for Click prevention), udev rules for the receiver's decoder and its device, a sudoers entry for switching the two services, and a marked block of two lines in `/boot/userconfig.txt`. Uninstalling removes them all.
 
 ## Credits
 
@@ -82,4 +91,4 @@ The plugin is free and open source, maintained by one developer in his own time.
 
 ## Licence
 
-MIT. GNU Unifont, shipped as `assets/unifont.hex`, is under its own licence; see `assets/UNIFONT.txt`.
+MIT. Two things shipped with the plugin are separate works under their own licences: GNU Unifont, as `assets/unifont.hex` (see `assets/UNIFONT.txt`), and Audio Keepalive, the program behind Click prevention, under the GNU General Public License (see `keepalive/NOTICE.txt`).

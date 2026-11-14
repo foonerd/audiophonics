@@ -2,6 +2,11 @@
 
 All notable changes to the Audiophonics Evo Sabre plugin are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.99.1] - 2026-11-14
+
+- **Click prevention**, a switch on the settings page, off until you switch it on. It is for a DAC that clicks, or loses the first moment of a track, when playback starts or resumes. With it on, the audio output is held open so the DAC's clocks never stop: a small program, Audio Keepalive, takes over the output, passes the music through untouched, and sends noise far too quiet to hear while nothing plays. On a Raspberry Pi 5 the DAC is otherwise given its clocks only while something plays. A change of sample rate still reopens the output.
+- After the plugin is installed or updated, Click prevention joins the player's audio path once the player has restarted; the plugin asks for the restart when it is needed. Where the Audio Keepalive plugin is already switched on, it is left to do the work.
+
 ## [2.99.0] - 2026-11-14
 
 The first build of what will be version 3, for the bench. The 2.99 builds are the rewrite on its way to the store; 3.0.0 will be the first of them to have run on a unit and been accepted there.

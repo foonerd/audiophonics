@@ -27,6 +27,18 @@ The SSD1322's RAM is 480 columns of four pixels; the 256-pixel glass sits in the
 
 Brightness is the contrast current (command 0xC1, 0 to 255) with the master current (0xC7) at full.
 
+## The DAC's clocks
+
+The DAC takes its bit clock and frame clock from the Raspberry Pi, and has to lock on to them before it can play.
+
+| | Raspberry Pi 4, Compute Module 4 | Raspberry Pi 5, Compute Module 5 |
+| --- | --- | --- |
+| The clocks start | when a stream is set up, before its first sample | with the stream's first sample |
+| On pause | they keep running | they stop |
+| The clocks stop | when the output is closed | when the output is closed |
+
+So on the Pi 5 family the DAC has no clocks between tracks unless something holds the output open. The plugin's Click prevention does that: with it on, the clocks run without a break on either family, except across a change of sample rate, which reopens the output.
+
 ## The remote
 
 The handset and its keys are described in [remote.md](remote.md). The streamer acts on five of them:

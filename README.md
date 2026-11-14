@@ -19,6 +19,8 @@ Raspberry Pi 4 and Raspberry Pi 5, and the Compute Module 4 and 5 on a carrier b
     plugins/     one folder per plugin: its Volumio side, its settings page, its installer
     bins/        the programs the plugins ship, one per product
     crates/      what the programs share: the player, the remote, the journal and the settings
+    components/  what a plugin ships from another project's release, by version
+    keys/        the key those releases are signed with
     overlays/    device tree overlays the products need
     hardware/    what is known of each product: buses, pins, the handset
     artwork/     the Audiophonics mark the greetings are drawn from
@@ -28,13 +30,15 @@ Raspberry Pi 4 and Raspberry Pi 5, and the Compute Module 4 and 5 on a carrier b
 
 The toolchain is pinned in `rust-toolchain.toml`; `rustup` installs it on first use. The shipped programs are static musl binaries for 32-bit ARM, linked with the GNU cross driver:
 
-    sudo apt-get install gcc-arm-linux-gnueabihf qemu-user shellcheck zip
+    sudo apt-get install gcc-arm-linux-gnueabihf qemu-user shellcheck zip unzip curl openssl
 
 Then, from the repository's root:
 
     scripts/check.sh              formatting, lints, tests, documentation, every screen drawn, the plugins' files and installers
     scripts/ship.sh               the programs, built for the player, into target/ship/
     scripts/package.sh            each plugin's zip, into dist/
+
+A plugin may ship a program this repository does not build. Each is named in `components/<name>.lock` with its version and comes from its own GitHub release; `scripts/package.sh` fetches it (`scripts/fetch-components.sh`) and puts nothing of it in a zip before the release's checksums have been verified against their Ed25519 signature with `keys/release-signing.pub`, the archive against the checksums, and the archive's own manifest against its signature and its files. Packaging therefore needs the network once per version.
 
 `scripts/ship.sh` and `scripts/package.sh` take plugin names to do less: `scripts/ship.sh evo_sabre`. With `qemu-user` installed, `ship.sh` runs each ARM binary and checks that it draws the same pixels as the host's build.
 
@@ -91,4 +95,4 @@ Sponsorship is a thank-you, not a purchase: it buys no priority, no features and
 
 ## Licence
 
-MIT; see [LICENSE](LICENSE). GNU Unifont, shipped with the display plugins as font data, is under its own licence; see the note beside it.
+MIT; see [LICENSE](LICENSE). What a plugin ships from elsewhere keeps its own licence, with a note beside it in the plugin: GNU Unifont, as font data, and Audio Keepalive, under the GNU General Public License.

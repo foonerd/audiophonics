@@ -10,7 +10,7 @@ const NUMBERS = {
     sleep_after: [0, 86400],
     deep_sleep_after: [0, 86400]
 };
-const SWITCHES = ['oled_active', 'remote_active'];
+const SWITCHES = ['oled_active', 'remote_active', 'click_prevention'];
 const SELECTS = { log_level: ['error', 'info', 'debug'] };
 
 // A switch as the store may hold it: a boolean, or its text.

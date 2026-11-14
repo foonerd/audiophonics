@@ -10,6 +10,9 @@ PLUGIN_DIR="/data/plugins/system_hardware/audiophonics_evo_sabre"
 BIN="$PLUGIN_DIR/bin/evosabre-panel"
 SERVICE="evosabre-panel"
 UNIT="/etc/systemd/system/$SERVICE.service"
+KEEPALIVE="$PLUGIN_DIR/keepalive/audio-keepalive-daemon"
+KEEPALIVE_SERVICE="evosabre-keepalive"
+KEEPALIVE_UNIT="/etc/systemd/system/$KEEPALIVE_SERVICE.service"
 RULES="/etc/udev/rules.d/70-evosabre-remote.rules"
 SUDOERS="/etc/sudoers.d/volumio-user-audiophonics_evo_sabre"
 USERCONFIG="/boot/userconfig.txt"
@@ -39,6 +42,16 @@ if ! VERSION=$("$BIN" --version 2>/dev/null); then
   refuse "ERROR: the display's program does not run on this machine ($(uname -m)); the EVO Sabre is a Raspberry Pi"
 fi
 echo "Program: $VERSION"
+
+# The program behind Click prevention is a second one, linked against the
+# player's own ALSA library. The plugin is of use without it, so a player it
+# does not run on is told, not refused.
+chmod +x "$KEEPALIVE" 2>/dev/null || true
+if KEEPALIVE_VERSION=$("$KEEPALIVE" --version 2>/dev/null); then
+  echo "Click prevention: $KEEPALIVE_VERSION"
+else
+  echo "WARNING: the click prevention program does not run on this machine; its switch will have no effect"
+fi
 
 # =============================================================================
 # CHECK: whether this is an update of a plugin in use. Volumio's own record
@@ -147,6 +160,8 @@ done
 cat > "$SUDOERS" << 'SUDO'
 # audiophonics_evo_sabre plugin: the display's service, switched with the plugin's Display setting
 volumio ALL=(ALL) NOPASSWD: /bin/systemctl enable --now evosabre-panel.service, /bin/systemctl disable --now evosabre-panel.service
+# and the service behind Click prevention
+volumio ALL=(ALL) NOPASSWD: /bin/systemctl restart evosabre-keepalive.service, /bin/systemctl stop evosabre-keepalive.service
 SUDO
 chmod 0440 "$SUDOERS"
 if ! visudo -c -f "$SUDOERS" >/dev/null 2>&1; then
@@ -161,6 +176,10 @@ fi
 # =============================================================================
 systemctl stop "$SERVICE.service" 2>/dev/null || true
 install -m 644 "$PLUGIN_DIR/systemd/$SERVICE.service" "$UNIT"
+# Click prevention's service is not enabled either: the plugin starts it
+# when its switch is on and stops it when it is off.
+systemctl stop "$KEEPALIVE_SERVICE.service" 2>/dev/null || true
+install -m 644 "$PLUGIN_DIR/systemd/$KEEPALIVE_SERVICE.service" "$KEEPALIVE_UNIT"
 systemctl daemon-reload
 
 chown -R volumio:volumio "$PLUGIN_DIR"

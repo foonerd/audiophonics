@@ -1,6 +1,7 @@
 #!/bin/bash
 # Assemble a plugin's zip as Volumio's plugin manager takes it: the plugin's
-# files at the root and its program under bin/. Output:
+# files at the root, its program under bin/, and the components it ships
+# from their own releases (scripts/fetch-components.sh). Output:
 # dist/<store name>-<version>.zip.
 #
 # The zip carries no node modules: `volumio plugin install` installs a
@@ -28,6 +29,7 @@ mkdir -p dist
 for plugin in "${plugins[@]}"; do
   [ -f "plugins/$plugin/build.conf" ] || { echo "package: no plugin $plugin under plugins/" >&2; exit 1; }
   CRATE=
+  COMPONENTS=
   . "plugins/$plugin/build.conf"
   version=$(sed -n 's/^version = "\(.*\)"/\1/p' "bins/$CRATE/Cargo.toml" | head -n1)
   name=$(sed -n 's/^ *"name": "\(.*\)",*$/\1/p' "plugins/$plugin/package.json" | head -n1)
@@ -42,13 +44,29 @@ for plugin in "${plugins[@]}"; do
   rm -rf "$stage/test" "$stage/build.conf" "$stage/CHANGELOG.md" "$stage/node_modules" "$stage/package-lock.json"
   install -D -m 755 "$bin" "$stage/bin/$CRATE"
 
+  # The components the plugin ships but this repository does not build,
+  # each fetched from its own release and verified first.
+  shipped=
+  for component in $COMPONENTS; do
+    scripts/fetch-components.sh "$component"
+    NAME='' VERSION='' FILES=''
+    . "components/$component.lock"
+    for entry in $FILES; do
+      from=${entry%%:*}
+      rest=${entry#*:}
+      install -D -m "${rest##*:}" "target/components/$component/files/$from" "$stage/${rest%%:*}"
+    done
+    shipped="$shipped${shipped:+, }\"$NAME\": \"$VERSION\""
+  done
+
   # The plugin's version follows its program's.
   sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$version\"/" "$stage/package.json"
 
-  # The build the zip carries: the commit and the time.
-  printf '{ "commit": "%s", "built": "%s" }\n' \
+  # The build the zip carries: the commit, the time, and the components'
+  # versions.
+  printf '{ "commit": "%s", "built": "%s", "components": { %s } }\n' \
     "$(git rev-parse --short HEAD 2>/dev/null || echo unknown)" \
-    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$stage/build.json"
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$shipped" > "$stage/build.json"
 
   zip="dist/$name-$version.zip"
   rm -f "$zip"

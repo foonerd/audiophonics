@@ -7,6 +7,10 @@
         "type": "boolean",
         "value": true
     },
+    "click_prevention": {
+        "type": "boolean",
+        "value": false
+    },
     "contrast": {
         "type": "number",
         "value": 100
