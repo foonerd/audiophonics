@@ -3,6 +3,7 @@
 What the plugins know about the hardware they drive, one page per product, and what the products share.
 
 - [EVO Sabre](evo-sabre.md)
+- [RaspDac Mini](raspdac-mini.md)
 - [The remote control](remote.md)
 
 ## Boards

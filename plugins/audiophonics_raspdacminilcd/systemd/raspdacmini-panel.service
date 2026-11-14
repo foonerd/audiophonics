@@ -1,0 +1,30 @@
+[Unit]
+Description=RaspDac Mini display and remote
+Documentation=https://github.com/foonerd/audiophonics
+# The glass shows nothing until this program runs, so it does not wait for
+# the rest of the system: it starts once the file systems and the devices
+# are there, and is stopped before they go.
+DefaultDependencies=no
+After=local-fs.target systemd-udevd.service
+Conflicts=shutdown.target
+Before=shutdown.target
+# A display that cannot be opened is tried again, a few times, then left.
+StartLimitIntervalSec=120
+StartLimitBurst=40
+
+[Service]
+Type=simple
+User=volumio
+Group=volumio
+SupplementaryGroups=spi gpio input audio
+RuntimeDirectory=raspdacmini-panel
+RuntimeDirectoryMode=0755
+ExecStart=/data/plugins/system_hardware/raspdac_mini_lcd/bin/raspdacmini-panel
+Restart=on-failure
+RestartSec=1
+KillSignal=SIGTERM
+# On a halt the panel holds its goodbye for three seconds before it goes dark.
+TimeoutStopSec=8
+
+[Install]
+WantedBy=sysinit.target

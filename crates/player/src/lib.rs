@@ -160,6 +160,20 @@ pub enum Seek {
     Back,
 }
 
+/// What a handset asks of the player besides moving through the music:
+/// each is a step or a switch whose outcome the player decides.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Ask {
+    VolumeUp,
+    VolumeDown,
+    /// Muted if it was not, and back.
+    Mute,
+    /// Repeat on if it was off, and back.
+    Repeat,
+    /// The queue in no order if it was in order, and back.
+    Shuffle,
+}
+
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
@@ -191,6 +205,7 @@ pub trait Player {
     fn transport(&self, cmd: Transport) -> Result<()>;
     fn seek(&self, step: Seek) -> Result<()>;
     fn set_volume(&self, percent: u8) -> Result<()>;
+    fn ask(&self, what: Ask) -> Result<()>;
 }
 
 #[cfg(test)]

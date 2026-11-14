@@ -43,6 +43,7 @@ impl std::fmt::Debug for Picture {
 
 impl Picture {
     /// A picture of one colour.
+    #[cfg(test)]
     pub fn filled(width: u32, height: u32, colour: Rgb) -> Self {
         Self {
             width,
@@ -76,6 +77,45 @@ impl Picture {
             })
             .collect();
         Ok(Picture { width, height, px })
+    }
+
+    /// Draw a cover that is an SVG, as Volumio's own source icons are, at
+    /// twice the height of the glass so that bringing it down smooths it.
+    /// What is see-through in it is black.
+    pub fn draw_svg(file: &[u8]) -> Result<Picture, String> {
+        let tree = resvg::usvg::Tree::from_data(file, &resvg::usvg::Options::default())
+            .map_err(|e| e.to_string())?;
+        let size = tree.size();
+        let height = 2 * HEIGHT;
+        let scale = height as f32 / size.height();
+        let width = ((size.width() * scale).round() as u32).clamp(1, MAX_SIDE);
+        let mut pixmap = resvg::tiny_skia::Pixmap::new(width, height)
+            .ok_or_else(|| format!("an SVG of {}x{}", size.width(), size.height()))?;
+        resvg::render(
+            &tree,
+            resvg::tiny_skia::Transform::from_scale(scale, scale),
+            &mut pixmap.as_mut(),
+        );
+        // The pixels come with their colour already scaled by how solid
+        // they are, which is what laying them on black makes of them.
+        let px = pixmap
+            .data()
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|p| [p[0], p[1], p[2]])
+            .collect();
+        Ok(Picture { width, height, px })
+    }
+
+    /// A cover from its file, whichever kind it is.
+    pub fn open(file: &[u8]) -> Result<Picture, String> {
+        let start = &file[..file.len().min(1024)];
+        let text = String::from_utf8_lossy(start);
+        if text.contains("<svg") || text.trim_start().starts_with("<?xml") {
+            return Picture::draw_svg(file);
+        }
+        Picture::decode(file)
     }
 
     fn get(&self, x: u32, y: u32) -> Rgb {
@@ -384,6 +424,27 @@ pub mod tests {
             image::ImageFormat::Png,
         );
         assert!(Picture::decode(&wide).is_err());
+    }
+
+    #[test]
+    fn an_svg_is_drawn_and_told_from_the_other_kinds_by_how_it_starts() {
+        let icon = br##"<?xml version="1.0"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50" viewBox="0 0 100 50">
+  <rect x="0" y="0" width="50" height="50" fill="#ff0000"/>
+</svg>"##;
+        let drawn = Picture::open(icon).unwrap();
+        assert_eq!(
+            (drawn.width, drawn.height),
+            (960, 480),
+            "twice the glass's height"
+        );
+        assert_eq!(drawn.get(100, 240), [255, 0, 0], "the red half");
+        assert_eq!(drawn.get(800, 240), BLACK, "what is see-through is black");
+        // A PNG still goes to the decoder, and what is neither is refused.
+        let png = encoded(&sample(8, 8), image::ImageFormat::Png);
+        assert_eq!(Picture::open(&png).unwrap(), sample(8, 8));
+        assert!(Picture::open(b"<svg").is_err());
+        assert!(Picture::open(b"").is_err());
     }
 
     #[test]

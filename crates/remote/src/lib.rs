@@ -11,6 +11,9 @@
 pub mod keys;
 pub mod rc;
 pub mod reader;
+pub mod status;
+pub mod watch;
 
 pub use keys::Key;
 pub use reader::{Event, Press, Reading};
+pub use status::Status;

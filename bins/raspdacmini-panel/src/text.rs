@@ -207,7 +207,10 @@ pub mod tests {
 
     /// The assets the plugin ships its faces in.
     pub fn assets() -> PathBuf {
-        PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets/dejavu"))
+        PathBuf::from(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../plugins/audiophonics_raspdacminilcd/assets"
+        ))
     }
 
     /// The rows and columns of a canvas that hold anything.

@@ -2,7 +2,7 @@
 //! backend serves on loopback.
 
 use crate::http;
-use crate::{Error, Player, Result, Seek, State, Transport};
+use crate::{Ask, Error, Player, Result, Seek, State, Transport};
 use std::time::Duration;
 
 #[derive(Clone)]
@@ -38,6 +38,36 @@ impl Volumio {
             Err(e) => Err(e.into()),
         }
     }
+
+    /// Ask a plugin for something through the endpoint it has registered
+    /// with the player, with one word of what is asked. As with a command,
+    /// an answer that does not come in time is not a failure: the request
+    /// has gone out.
+    pub fn plugin(&self, endpoint: &str, word: &str) -> Result<()> {
+        let sent = http::send(
+            &self.url(&format!(
+                "/api/v1/pluginEndpoint?endpoint={endpoint}&data={word}"
+            )),
+            self.timeout,
+        )?;
+        match http::reply(sent) {
+            Ok(_) => Ok(()),
+            Err(e) if http::timed_out(&e) => Ok(()),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// How many tracks the queue holds.
+    pub fn queue_length(&self) -> Result<u64> {
+        let body = http::get(&self.url("/api/v1/getQueue"), self.timeout)?;
+        let queue: serde_json::Value =
+            serde_json::from_str(&body).map_err(|e| Error::Decode(e.to_string()))?;
+        queue
+            .get("queue")
+            .and_then(serde_json::Value::as_array)
+            .map(|tracks| tracks.len() as u64)
+            .ok_or_else(|| Error::Decode("the answer names no queue".to_string()))
+    }
 }
 
 impl Player for Volumio {
@@ -64,6 +94,17 @@ impl Player for Volumio {
 
     fn set_volume(&self, percent: u8) -> Result<()> {
         self.command(&format!("volume&volume={}", percent.min(100)))
+    }
+
+    fn ask(&self, what: Ask) -> Result<()> {
+        self.command(match what {
+            Ask::VolumeUp => "volume&volume=plus",
+            Ask::VolumeDown => "volume&volume=minus",
+            Ask::Mute => "volume&volume=toggle",
+            // Without a value the player turns each over.
+            Ask::Repeat => "repeat",
+            Ask::Shuffle => "random",
+        })
     }
 }
 
@@ -120,6 +161,51 @@ mod tests {
             .join()
             .unwrap()
             .starts_with("GET /api/v1/commands?cmd=seek&position=plus HTTP/1.1"));
+    }
+
+    #[test]
+    fn a_step_or_a_switch_is_asked_for_and_the_player_decides_what_it_comes_to() {
+        for (what, sent) in [
+            (Ask::VolumeUp, "cmd=volume&volume=plus "),
+            (Ask::VolumeDown, "cmd=volume&volume=minus "),
+            (Ask::Mute, "cmd=volume&volume=toggle "),
+            (Ask::Repeat, "cmd=repeat "),
+            (Ask::Shuffle, "cmd=random "),
+        ] {
+            let (base, served) = player(Some(r#"{"response":"ok"}"#), Duration::ZERO);
+            Volumio::new(base, Duration::from_millis(500))
+                .ask(what)
+                .unwrap();
+            let request = served.join().unwrap();
+            assert!(request.contains(sent), "{what:?}: {request}");
+        }
+    }
+
+    #[test]
+    fn a_plugin_is_asked_through_its_endpoint_and_the_queue_is_counted() {
+        let (base, served) = player(Some(r#"{"success":true}"#), Duration::ZERO);
+        Volumio::new(base, Duration::from_millis(500))
+            .plugin("raspdac_mini_lcd", "shutdown")
+            .unwrap();
+        assert!(served.join().unwrap().starts_with(
+            "GET /api/v1/pluginEndpoint?endpoint=raspdac_mini_lcd&data=shutdown HTTP/1.1"
+        ));
+
+        let (base, served) = player(
+            Some(r#"{"queue":[{"name":"a"},{"name":"b"},{"name":"c"}]}"#),
+            Duration::ZERO,
+        );
+        let player_ = Volumio::new(base, Duration::from_millis(500));
+        assert_eq!(player_.queue_length().unwrap(), 3);
+        assert!(served
+            .join()
+            .unwrap()
+            .starts_with("GET /api/v1/getQueue HTTP/1.1"));
+        let (base, served) = player(Some(r#"{"error":"busy"}"#), Duration::ZERO);
+        assert!(Volumio::new(base, Duration::from_millis(500))
+            .queue_length()
+            .is_err());
+        served.join().unwrap();
     }
 
     #[test]

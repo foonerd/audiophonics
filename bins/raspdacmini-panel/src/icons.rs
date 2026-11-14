@@ -9,6 +9,7 @@ pub struct Icon {
 }
 
 impl Icon {
+    #[cfg(test)]
     pub fn width(&self) -> u32 {
         self.rows.iter().map(|r| r.len()).max().unwrap_or(0) as u32
     }
@@ -170,6 +171,7 @@ const CROSS: &[(i32, i32)] = &[
 ];
 
 /// How wide the speaker is with all its waves.
+#[cfg(test)]
 pub const SPEAKER_WIDTH: u32 = 15;
 
 /// How many waves a volume has: none at nought, three from two thirds up.

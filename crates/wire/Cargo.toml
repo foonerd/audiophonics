@@ -1,0 +1,14 @@
+[package]
+name = "audiophonics-wire"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+description = "How a display is wired to a Raspberry Pi: the GPIO chip found by its label on either family, a line taken as an output, and the size of an SPI transfer"
+
+[dependencies]
+gpio-cdev = "0.6"
+
+[lints]
+workspace = true

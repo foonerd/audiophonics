@@ -6,5 +6,7 @@ The overlays the products need.
 | --- | --- | --- |
 | EVO Sabre | `gpio-ir` | the Raspberry Pi kernel |
 | EVO Sabre | `i-sabre-q2m` | the Raspberry Pi kernel |
+| RaspDac Mini | `gpio-ir` | the Raspberry Pi kernel |
+| RaspDac Mini | `i-sabre-q2m` | the Raspberry Pi kernel |
 
-Both EVO Sabre overlays ship with the kernel, so nothing is built here for it. An overlay a product needs that the kernel does not ship has its source in this folder and is compiled into its plugin when the plugin is packaged.
+These overlays ship with the kernel, so nothing is built here for either product. An overlay a product needs that the kernel does not ship has its source in this folder and is compiled into its plugin when the plugin is packaged.

@@ -1,12 +1,12 @@
-//! What the panel does when the player is going down.
+//! What a display does when the player is going down.
 //!
-//! The plugin tells the panel which way, from whichever surface asked, by
-//! signal: USR1 for a halt, USR2 for a restart. On a restart the farewell
-//! stays on the glass through the reboot, because the OLED keeps its picture
-//! while the board resets, and the greeting replaces it when the runtime
-//! returns. On a halt the panel says goodbye, holds it, and goes dark:
-//! a halted board keeps the panel powered, and a lit farewell would sit
-//! there until the mains are cut.
+//! The plugin tells the display which way, from whichever surface asked,
+//! by signal: USR1 for a halt, USR2 for a restart. On a restart the farewell
+//! stays on the glass through the reboot, because the panel keeps its
+//! picture while the board resets, and the greeting replaces it when the
+//! daemon returns. On a halt the display says goodbye, holds it, and goes
+//! dark: a halted board keeps the panel powered, and a lit farewell would
+//! sit there until the mains are cut.
 
 use std::time::Duration;
 

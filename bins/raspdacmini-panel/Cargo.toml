@@ -10,7 +10,9 @@ description = "The RaspDac Mini's display and its remote: a 320x240 ILI9341 LCD 
 [dependencies]
 audiophonics-base = { path = "../../crates/base" }
 audiophonics-player = { path = "../../crates/player" }
+audiophonics-remote = { path = "../../crates/remote" }
 audiophonics-unifont = { path = "../../crates/unifont" }
+audiophonics-wire = { path = "../../crates/wire" }
 # The drawing model: a DrawTarget over the frame, and its primitives.
 embedded-graphics = "0.8"
 # Outline fonts, rasterised without a C library. Its SIMD paths are left
@@ -19,6 +21,15 @@ embedded-graphics = "0.8"
 fontdue = { version = "0.9", default-features = false, features = ["std", "hashbrown"] }
 # Covers: JPEG, PNG, GIF, WebP and BMP, decoded without a C library.
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "webp", "bmp"] }
+# Volumio's own source icons are SVG. Drawn without system fonts: an icon
+# has no text.
+resvg = { version = "0.48", default-features = false }
+# The panel: spidev for the bus, two GPIO lines for D/C and reset. The
+# controller's start-up is thirty lines of commands, which are in
+# src/ili9341.rs where they can be read.
+spidev = "0.7"
+gpio-cdev = "0.6"
+signal-hook = { version = "0.3", default-features = false }
 serde_json.workspace = true
 
 [dev-dependencies]

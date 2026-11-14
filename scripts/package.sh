@@ -40,7 +40,9 @@ for plugin in "${plugins[@]}"; do
   stage="dist/stage/$plugin"
   rm -rf dist/stage
   mkdir -p "$stage"
-  cp -r "plugins/$plugin/." "$stage/"
+  # A file two plugins ship is kept once in the repository and linked from
+  # the other's folder; the zip carries the file.
+  cp -rL "plugins/$plugin/." "$stage/"
   # What the repository needs and the player does not.
   rm -rf "$stage/test" "$stage/build.conf" "$stage/CHANGELOG.md" "$stage/node_modules" "$stage/package-lock.json"
   install -D -m 755 "$bin" "$stage/bin/$CRATE"

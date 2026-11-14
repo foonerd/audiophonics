@@ -22,7 +22,6 @@
 //! before it; the panel carries on without the remote meanwhile.
 
 mod config;
-mod farewell;
 mod frame;
 mod greeting;
 mod grey;
@@ -36,24 +35,23 @@ mod render;
 mod scroll;
 mod segments;
 mod ssd1322;
-mod status;
 mod text;
 
 use audiophonics_base::clock::Clock;
 use audiophonics_base::idle::{Idle, Level, Playing};
-use audiophonics_base::{board, debug, error, info, log, net};
+use audiophonics_base::{board, debug, error, info, leaving as farewell, log, net};
 use audiophonics_player::probe::{Probe, Report};
 use audiophonics_player::{Player, Volumio};
-use audiophonics_remote::{rc, reader, Event, Press, Reading};
+use audiophonics_remote::watch::{self, Watch};
+use audiophonics_remote::{Event, Press, Status};
 use audiophonics_unifont::Unifont;
 use config::Config;
 use frame::Frame;
 use keys::Action;
-use status::Status;
 use std::path::Path;
 use std::process::ExitCode;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{self, Sender};
+use std::sync::mpsc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -87,9 +85,6 @@ const ZONE_EVERY: u32 = 120;
 /// How long after the player last played it still counts as playing, for
 /// the burn-in policy: the player reports a stop between two tracks.
 const REST_GRACE: Duration = Duration::from_secs(10);
-/// How often a receiver that is not there yet, or a decoder that is off, is
-/// looked at again.
-const LOOK_AGAIN: Duration = Duration::from_secs(5);
 
 /// What the loop wakes for besides time.
 enum Msg {
@@ -235,114 +230,6 @@ fn raised_by(signals: &[i32]) -> Result<Arc<AtomicBool>, String> {
     Ok(flag)
 }
 
-const REMOTE_OFF: &str = "switched off on the settings page";
-
-/// The remote as the loop keeps it: whether it is being read and how, what
-/// there is to say of it, and when to look at it again.
-struct Remote {
-    receiver: Option<rc::Receiver>,
-    reading: Option<Reading>,
-    decoder_on: bool,
-    line: String,
-    look_again: Instant,
-}
-
-impl Remote {
-    fn new(now: Instant) -> Self {
-        Self {
-            receiver: None,
-            reading: None,
-            decoder_on: false,
-            line: "not looked for yet".to_string(),
-            look_again: now,
-        }
-    }
-
-    /// True when there is something to look at again: a receiver not yet
-    /// read, or one whose decoder is off.
-    fn due(&self, now: Instant) -> bool {
-        now >= self.look_again && !(self.reading.is_some() && self.decoder_on)
-    }
-
-    /// Find the receiver and start reading it, or, where it is read
-    /// already, see whether its decoder has come on. What became of it is
-    /// said once, when it changes.
-    fn look(&mut self, tx: &Sender<Msg>, now: Instant) {
-        self.look_again = now + LOOK_AGAIN;
-        if self.reading.is_none() {
-            if let Err(e) = self.start(tx) {
-                self.say(e);
-                return;
-            }
-        }
-        let line = self.describe();
-        self.say(line);
-    }
-
-    fn start(&mut self, tx: &Sender<Msg>) -> Result<(), String> {
-        let receiver = rc::find().map_err(|e| format!("not found: {e}"))?;
-        let reading = reader::spawn(&receiver, tx.clone(), Msg::Remote)
-            .map_err(|e| format!("{} found, but it cannot be read: {e}", receiver.name))?;
-        self.receiver = Some(receiver);
-        self.reading = Some(reading);
-        Ok(())
-    }
-
-    /// The receiver being read, in a sentence, with its decoder seen to.
-    fn describe(&mut self) -> String {
-        let (Some(receiver), Some(reading)) = (&self.receiver, &self.reading) else {
-            return self.line.clone();
-        };
-        let mut line = match reading {
-            Reading::Frames => format!(
-                "reading {} at {}",
-                receiver.name,
-                receiver
-                    .lirc
-                    .as_deref()
-                    .unwrap_or(&receiver.event)
-                    .display()
-            ),
-            Reading::Scancodes { why } => format!(
-                "reading {} at {} ({why}; a repeat with no frame before it reads as a press)",
-                receiver.name,
-                receiver.event.display()
-            ),
-        };
-        match rc::ensure_decoder(receiver) {
-            rc::Decoder::On | rc::Decoder::SwitchedOn => self.decoder_on = true,
-            rc::Decoder::Off { enabled, why } => {
-                self.decoder_on = false;
-                line.push_str(&format!(
-                    ", but its nec decoder is off (on: {enabled}) and could not be switched on: {why}"
-                ));
-            }
-        }
-        line
-    }
-
-    fn say(&mut self, line: String) {
-        if line == self.line {
-            return;
-        }
-        if self.reading.is_some() && self.decoder_on {
-            info!("remote: {line}");
-        } else {
-            error!("remote: {line}");
-        }
-        self.line = line;
-    }
-
-    /// The device stopped answering: look for it afresh.
-    fn lost(&mut self, why: &str, now: Instant) {
-        self.receiver = None;
-        self.reading = None;
-        self.decoder_on = false;
-        self.look_again = now + LOOK_AGAIN;
-        self.say(format!("the receiver stopped answering: {why}"));
-    }
-}
-
 /// A frame from the handset: said in the journal, noted for the settings
 /// page, and obeyed where it is one of the keys the streamer takes. Returns
 /// whether the player was asked for something.
@@ -419,9 +306,9 @@ fn run(path: &str) -> Result<(), String> {
 
     let (tx, rx) = mpsc::channel::<Msg>();
     let mut status = Status::new();
-    let mut remote = Remote::new(greeted_at);
+    let mut remote = Watch::new(greeted_at);
     if !cfg.remote {
-        status.receiver(REMOTE_OFF);
+        status.receiver(watch::OFF);
     }
 
     let mut volumio = Volumio::new(cfg.player_base.clone(), cfg.request_timeout);
@@ -468,10 +355,10 @@ fn run(path: &str) -> Result<(), String> {
                 Level::Blank => {}
             }
             if new.remote {
-                remote.look_again = Instant::now();
-                status.receiver(remote.line.clone());
+                remote.look_now(Instant::now());
+                status.receiver(remote.line());
             } else {
-                status.receiver(REMOTE_OFF);
+                status.receiver(watch::OFF);
             }
             (clock, _) = Clock::new();
             cfg = new;
@@ -542,8 +429,8 @@ fn run(path: &str) -> Result<(), String> {
 
         let now = Instant::now();
         if cfg.remote && remote.due(now) {
-            remote.look(&tx, now);
-            status.receiver(remote.line.clone());
+            remote.look(&tx, Msg::Remote, now);
+            status.receiver(remote.line());
         }
         if now >= next_poll {
             match probe.observe(volumio.state()) {
@@ -673,7 +560,7 @@ fn run(path: &str) -> Result<(), String> {
                         }
                         Msg::Remote(Event::Lost(why)) => {
                             remote.lost(&why, now);
-                            status.receiver(remote.line.clone());
+                            status.receiver(remote.line());
                         }
                     }
                 }

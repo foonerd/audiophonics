@@ -1,0 +1,48 @@
+# RaspDac Mini
+
+A streamer built around a Raspberry Pi, an ES9038Q2M DAC board, a 2.4 inch colour display and an infrared receiver.
+
+## What the Raspberry Pi drives
+
+| Part | Connection | Notes |
+| --- | --- | --- |
+| Display | SPI0, CE0 (`/dev/spidev0.0`), mode 0, 64 MHz | ILI9341, 320 x 240 as mounted, sixteen bits a pixel, 4-wire SPI |
+| Display D/C | GPIO 27 | |
+| Display reset | GPIO 24 | active low |
+| Infrared receiver | GPIO 4 | `dtoverlay=gpio-ir,gpio_pin=4` |
+| DAC | I2S, and its mixer | `dtoverlay=i-sabre-q2m`; ALSA card "I-Sabre Q2M DAC" |
+
+The display's backlight is not on a line the Raspberry Pi drives: it is lit whenever the unit is.
+
+The display, its two lines and the receiver are wired as on the [EVO Sabre](evo-sabre.md), and the handset is [the same](remote.md). Unlike the EVO Sabre's, this DAC board does not read the handset: every key is the streamer's to act on.
+
+## Boot configuration
+
+    dtparam=spi=on
+    dtoverlay=gpio-ir,gpio_pin=4
+
+The plugin writes these into its own block of `/boot/userconfig.txt`. The DAC's overlay is written by Volumio when the DAC is chosen in Playback Options, as "Audiophonics I-Sabre ES9028Q2M".
+
+## The display
+
+The ILI9341 holds the picture in its own memory, 240 columns by 320 rows. The glass is mounted on its side, so the memory is read out with rows and columns exchanged and both mirrored, and the colour filter's order is blue, green, red: address mode (0x36) 0xE8. Pixels are sixteen bits, five of red, six of green and five of blue (pixel format, 0x3A, 0x55), sent high byte first.
+
+A part of the picture is changed by naming a window (column address 0x2A, page address 0x2B, each a first and a last, sixteen bits, high byte first) and writing its pixels (memory write, 0x2C). The write goes on across the gaps between SPI transfers.
+
+The start-up the panel is given, after a reset, is in `bins/raspdacmini-panel/src/ili9341.rs`: the power and timing registers and the two gamma curves are the panel maker's values. The memory is written black before the display is switched on (0x29).
+
+Version 1 of the plugin had the kernel drive the panel, through the `fb_ili9341` driver and an overlay of its own, `raspdac-mini-lcd`, which gave the panel as a framebuffer and took the SPI device. Where that overlay is still loaded, `/dev/spidev0.0` does not exist.
+
+## The DAC's two choices
+
+Both are controls of the card's mixer, each a list of names:
+
+| Control | Names |
+| --- | --- |
+| `I2S/SPDIF Select` | `I2S`, the player; `SPDIF` |
+| `FIR Filter Type` | the filters the DAC has, such as `brick wall` |
+
+    amixer -c <card> sget 'FIR Filter Type'
+    amixer -c <card> sset 'I2S/SPDIF Select' SPDIF
+
+The card's number is in `/proc/asound/cards`, on the line that names "I-Sabre Q2M DAC".

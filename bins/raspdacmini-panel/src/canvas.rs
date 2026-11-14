@@ -74,6 +74,7 @@ impl Canvas {
     }
 
     /// The colour of a pixel; black beyond the edge.
+    #[cfg(test)]
     pub fn get(&self, x: i32, y: i32) -> Rgb {
         Self::at(x, y).map_or(BLACK, |i| self.px[i])
     }

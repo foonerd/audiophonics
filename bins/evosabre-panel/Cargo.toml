@@ -12,6 +12,7 @@ audiophonics-base = { path = "../../crates/base" }
 audiophonics-player = { path = "../../crates/player" }
 audiophonics-remote = { path = "../../crates/remote" }
 audiophonics-unifont = { path = "../../crates/unifont" }
+audiophonics-wire = { path = "../../crates/wire" }
 # The panel. embedded-graphics is the drawing model (a DrawTarget over the
 # 4-bit frame, its fonts and primitives); spidev and gpio-cdev are the two
 # kernel interfaces the SSD1322 is wired to. The controller needs forty

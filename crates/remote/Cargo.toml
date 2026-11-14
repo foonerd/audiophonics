@@ -8,6 +8,8 @@ repository.workspace = true
 description = "The Audiophonics infrared handset, read from the kernel's own decoder"
 
 [dependencies]
+audiophonics-base = { path = "../base" }
+serde_json.workspace = true
 # One ioctl: the request that sets the receiver's device to hand over
 # decoded frames.
 libc = "0.2"

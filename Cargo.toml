@@ -5,6 +5,7 @@ members = [
     "crates/player",
     "crates/remote",
     "crates/unifont",
+    "crates/wire",
     "bins/evosabre-panel",
     "bins/raspdacmini-panel",
 ]

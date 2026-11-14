@@ -1,4 +1,4 @@
-//! What the panel knows about its remote, left where the plugin's settings
+//! What a daemon knows about its remote, left where the plugin's settings
 //! page can read it: a small JSON file in the service's runtime directory,
 //! rewritten when the receiver is found or lost and when a button arrives.
 //!
@@ -12,6 +12,12 @@ pub struct Status {
     file: Option<PathBuf>,
     receiver: String,
     last_key: Option<(String, u64)>,
+}
+
+impl Default for Status {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Status {
@@ -68,7 +74,7 @@ mod tests {
 
     #[test]
     fn the_file_says_what_the_receiver_is_doing_and_which_button_came_last() {
-        let dir = std::env::temp_dir().join(format!("evosabre-status-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("remote-status-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("remote.json");
         let read = || -> serde_json::Value {
