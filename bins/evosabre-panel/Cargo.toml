@@ -11,6 +11,7 @@ description = "The EVO Sabre's second display and its remote: an SSD1322 OLED dr
 audiophonics-base = { path = "../../crates/base" }
 audiophonics-player = { path = "../../crates/player" }
 audiophonics-remote = { path = "../../crates/remote" }
+audiophonics-unifont = { path = "../../crates/unifont" }
 # The panel. embedded-graphics is the drawing model (a DrawTarget over the
 # 4-bit frame, its fonts and primitives); spidev and gpio-cdev are the two
 # kernel interfaces the SSD1322 is wired to. The controller needs forty
@@ -24,6 +25,9 @@ serde_json.workspace = true
 # tap's own reader, from the Glass repository where evotap is built; the
 # ring's layout is a contract between the two.
 tap = { git = "https://github.com/foonerd/glass", tag = "v0.11.47" }
+
+[dev-dependencies]
+audiophonics-unifont = { path = "../../crates/unifont", features = ["sample"] }
 
 [lints]
 workspace = true

@@ -38,7 +38,6 @@ mod segments;
 mod ssd1322;
 mod status;
 mod text;
-mod unifont;
 
 use audiophonics_base::clock::Clock;
 use audiophonics_base::idle::{Idle, Level, Playing};
@@ -46,6 +45,7 @@ use audiophonics_base::{board, debug, error, info, log, net};
 use audiophonics_player::probe::{Probe, Report};
 use audiophonics_player::{Player, Volumio};
 use audiophonics_remote::{rc, reader, Event, Press, Reading};
+use audiophonics_unifont::Unifont;
 use config::Config;
 use frame::Frame;
 use keys::Action;
@@ -56,7 +56,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Sender};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use unifont::Unifont;
 
 const NAME: &str = "evosabre-panel";
 

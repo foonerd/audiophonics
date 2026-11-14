@@ -50,6 +50,21 @@ pub struct State {
     pub repeat_single: bool,
     #[serde(default, deserialize_with = "lenient_bool")]
     pub random: bool,
+    /// Where the cover is: a path on the player, or an address elsewhere.
+    #[serde(default, deserialize_with = "lenient_string")]
+    pub albumart: String,
+    /// The bit rate as the player words it, such as "320 Kbps"; empty for
+    /// most files.
+    #[serde(default, deserialize_with = "lenient_string")]
+    pub bitrate: String,
+    #[serde(default, deserialize_with = "lenient_count")]
+    pub channels: Option<u64>,
+    /// The kind of track: "flac", "mp3", "webradio", "spotify".
+    #[serde(default, rename = "trackType", deserialize_with = "lenient_string")]
+    pub track_type: String,
+    /// The track's place in the queue, counted from nought.
+    #[serde(default, deserialize_with = "lenient_count")]
+    pub position: Option<u64>,
 }
 
 impl State {
@@ -204,6 +219,26 @@ mod tests {
         assert!(!s.mute);
         assert_eq!(s.volume, Some(45));
         assert_eq!(s.duration, Some(0));
+    }
+
+    #[test]
+    fn the_cover_and_what_a_second_page_lists_decode() {
+        let body = r#"{"status":"play","position":3,"albumart":"/albumart?cacheid=1&web=a/b/large","bitrate":"320 Kbps","channels":2,"trackType":"flac"}"#;
+        let s: State = serde_json::from_str(body).unwrap();
+        assert_eq!(s.albumart, "/albumart?cacheid=1&web=a/b/large");
+        assert_eq!(s.bitrate, "320 Kbps");
+        assert_eq!(s.channels, Some(2));
+        assert_eq!(s.track_type, "flac");
+        assert_eq!(s.position, Some(3));
+        let bare: State = serde_json::from_str(
+            r#"{"albumart":null,"bitrate":null,"channels":"","trackType":null}"#,
+        )
+        .unwrap();
+        assert_eq!(bare.albumart, "");
+        assert_eq!(bare.bitrate, "");
+        assert_eq!(bare.channels, None);
+        assert_eq!(bare.track_type, "");
+        assert_eq!(bare.position, None);
     }
 
     #[test]

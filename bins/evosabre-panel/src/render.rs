@@ -9,9 +9,9 @@ use crate::greeting;
 use crate::grey;
 use crate::layout::{self, Metered, Place, Playing};
 use crate::meters::{self, Bar};
-use crate::unifont::Unifont;
 use audiophonics_base::clock::LocalTime;
 use audiophonics_player::State;
+use audiophonics_unifont::Unifont;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 

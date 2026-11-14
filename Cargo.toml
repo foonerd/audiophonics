@@ -4,7 +4,9 @@ members = [
     "crates/base",
     "crates/player",
     "crates/remote",
+    "crates/unifont",
     "bins/evosabre-panel",
+    "bins/raspdacmini-panel",
 ]
 
 [workspace.package]

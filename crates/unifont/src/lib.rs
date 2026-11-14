@@ -1,4 +1,4 @@
-//! GNU Unifont, read from its `.hex` file, for text the panel's own faces
+//! GNU Unifont, read from its `.hex` file, for text a display's own faces
 //! cannot draw: Chinese, Japanese, Korean, Cyrillic, Greek and the rest of
 //! the Basic Multilingual Plane.
 //!
@@ -164,24 +164,26 @@ fn read(file: &File, entry: u32) -> Option<Glyph> {
     })
 }
 
-#[cfg(test)]
-pub mod tests {
-    use super::*;
+/// A small file in Unifont's format, written to the temporary directory for
+/// a test: a narrow A, a wide 中, a line that is not a glyph, and a glyph
+/// beyond the plane this reads. The caller removes it.
+#[cfg(any(test, feature = "sample"))]
+pub fn sample(tag: &str) -> PathBuf {
+    let path =
+        std::env::temp_dir().join(format!("unifont-sample-{tag}-{}.hex", std::process::id()));
+    let narrow = "0000000018242442427E424242420000";
+    let wide = "010001000100FFFE8102810281028102FFFE8102010001000100010001000000";
+    std::fs::write(
+        &path,
+        format!("0041:{narrow}\n# not a glyph\n4E2D:{wide}\n01F600:{wide}\n"),
+    )
+    .expect("the temporary directory takes a small file");
+    path
+}
 
-    /// A small file in Unifont's format: a narrow A, a wide 中, a line that
-    /// is not a glyph, and a glyph beyond the plane this reads.
-    pub fn sample(tag: &str) -> PathBuf {
-        let path =
-            std::env::temp_dir().join(format!("evosabre-unifont-{tag}-{}.hex", std::process::id()));
-        let narrow = "0000000018242442427E424242420000";
-        let wide = "010001000100FFFE8102810281028102FFFE8102010001000100010001000000";
-        std::fs::write(
-            &path,
-            format!("0041:{narrow}\n# not a glyph\n4E2D:{wide}\n01F600:{wide}\n"),
-        )
-        .unwrap();
-        path
-    }
+#[cfg(test)]
+mod tests {
+    use super::*;
 
     #[test]
     fn narrow_and_wide_glyphs_are_read_with_the_left_pixel_in_the_high_bit() {
@@ -221,7 +223,7 @@ pub mod tests {
             .contains("/nonexistent/unifont.hex"));
         assert!(font.take_problem().is_none());
 
-        let path = std::env::temp_dir().join(format!("evosabre-notfont-{}", std::process::id()));
+        let path = std::env::temp_dir().join(format!("unifont-notfont-{}", std::process::id()));
         std::fs::write(&path, "hello\nworld\n").unwrap();
         let mut font = Unifont::new(&path);
         assert!(!font.usable());

@@ -6,7 +6,7 @@
 //! so a title in Japanese or Greek reads as one line of one face.
 
 use crate::frame::Frame;
-use crate::unifont::{self, Unifont};
+use audiophonics_unifont::{self as unifont, Unifont};
 use embedded_graphics::mono_font::{MonoFont, MonoTextStyle};
 use embedded_graphics::pixelcolor::Gray4;
 use embedded_graphics::prelude::*;
@@ -134,7 +134,7 @@ fn wide(f: &mut Frame, font: &mut Unifont, s: &str, y: i32, luma: u8, offset: i3
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::unifont::tests::sample;
+    use audiophonics_unifont::sample;
     use embedded_graphics::mono_font::iso_8859_1::FONT_9X18_BOLD;
 
     #[test]

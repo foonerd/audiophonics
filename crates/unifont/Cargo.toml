@@ -1,0 +1,15 @@
+[package]
+name = "audiophonics-unifont"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+description = "GNU Unifont read from its .hex file, a glyph at a time, for text a display's own faces cannot draw"
+
+[features]
+# A small font file for the tests of whatever draws with this.
+sample = []
+
+[lints]
+workspace = true

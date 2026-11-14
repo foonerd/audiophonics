@@ -12,9 +12,9 @@ use crate::meters::{self, Bar};
 use crate::scroll::Marquee;
 use crate::segments;
 use crate::text::{self, Face};
-use crate::unifont::Unifont;
 use audiophonics_base::clock::LocalTime;
 use audiophonics_player::State;
+use audiophonics_unifont::Unifont;
 use embedded_graphics::mono_font::iso_8859_1::{FONT_5X8, FONT_6X10, FONT_7X13, FONT_9X18_BOLD};
 use embedded_graphics::mono_font::MonoFont;
 use std::time::{Duration, Instant};
@@ -524,7 +524,7 @@ impl Selector {
 pub mod tests {
     use super::*;
     use crate::frame;
-    use crate::unifont::tests::sample;
+    use audiophonics_unifont::sample;
 
     pub fn dire_straits() -> State {
         State {
