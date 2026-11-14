@@ -1,7 +1,11 @@
 #!/bin/bash
 # Assemble a plugin's zip as Volumio's plugin manager takes it: the plugin's
-# files at the root, its program under bin/, its node modules. Output:
+# files at the root and its program under bin/. Output:
 # dist/<store name>-<version>.zip.
+#
+# The zip carries no node modules: `volumio plugin install` installs a
+# plugin's dependencies on the player, and the plugin store refuses a
+# package that brings its own.
 #
 #   scripts/package.sh              every plugin
 #   scripts/package.sh evo_sabre    the ones named
@@ -35,7 +39,7 @@ for plugin in "${plugins[@]}"; do
   mkdir -p "$stage"
   cp -r "plugins/$plugin/." "$stage/"
   # What the repository needs and the player does not.
-  rm -rf "$stage/test" "$stage/build.conf" "$stage/CHANGELOG.md" "$stage/node_modules"
+  rm -rf "$stage/test" "$stage/build.conf" "$stage/CHANGELOG.md" "$stage/node_modules" "$stage/package-lock.json"
   install -D -m 755 "$bin" "$stage/bin/$CRATE"
 
   # The plugin's version follows its program's.
@@ -46,17 +50,13 @@ for plugin in "${plugins[@]}"; do
     "$(git rev-parse --short HEAD 2>/dev/null || echo unknown)" \
     "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$stage/build.json"
 
-  # Node modules: with npm on this machine, directly; otherwise in a container.
-  if command -v npm >/dev/null 2>&1; then
-    ( cd "$stage" && npm install --omit=dev --no-audit --no-fund --loglevel=error >/dev/null )
-  else
-    docker run --rm -v "$ROOT/$stage:/plugin" -w /plugin node:20-slim sh -c "npm install --omit=dev --no-audit --no-fund --loglevel=error >/dev/null && chown -R $(id -u):$(id -g) /plugin/node_modules /plugin/package-lock.json 2>/dev/null || true"
-  fi
-  rm -f "$stage/package-lock.json"
-
   zip="dist/$name-$version.zip"
   rm -f "$zip"
   ( cd "$stage" && zip -qr "$ROOT/$zip" . )
   rm -rf dist/stage
+  if unzip -Z1 "$zip" | grep -q -e '^node_modules/' -e '/node_modules/' -e 'package-lock\.json$'; then
+    echo "package: $zip carries node modules or a lock file; the store refuses it" >&2
+    exit 1
+  fi
   ls -l "$zip"
 done

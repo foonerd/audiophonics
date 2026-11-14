@@ -56,6 +56,8 @@ Copy the zip to the player and install it as any plugin zip:
     ssh volumio@volumio.local
     mkdir evo && cd evo && miniunzip ../audiophonics_evo_sabre-3.0.0.zip && volumio plugin install
 
+`volumio plugin install` installs the plugin's Node dependencies on the player, so the player needs the network for it; the zip carries no `node_modules`, as the plugin store requires.
+
 A plugin that changes the boot configuration says so when it is installed; restart the player once after that.
 
 ## Releases
