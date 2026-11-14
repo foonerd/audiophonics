@@ -2,7 +2,7 @@
 # folder under plugins/: the check, the program built for the player, the
 # plugin's zip and its digest, published as a GitHub release.
 #
-#   git tag evo_sabre-v3.0.0 && git push origin evo_sabre-v3.0.0
+#   git tag evo_sabre-v2.99.0 && git push origin evo_sabre-v2.99.0
 #
 # Run by hand, it does all of that for the plugin named and stops short of
 # publishing, so a tag is never spent finding out that the release is broken.

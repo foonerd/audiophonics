@@ -17,8 +17,9 @@ fn split_url(url: &str) -> Option<(String, String)> {
     }
 }
 
-/// The body of the reply to a GET.
-pub fn get(url: &str, timeout: Duration) -> std::io::Result<String> {
+/// Send a GET. The stream comes back with the request on its way and the
+/// reply still to be read.
+pub fn send(url: &str, timeout: Duration) -> std::io::Result<TcpStream> {
     let (authority, path) = split_url(url).ok_or_else(|| {
         std::io::Error::new(std::io::ErrorKind::InvalidInput, "not an http:// url")
     })?;
@@ -32,7 +33,11 @@ pub fn get(url: &str, timeout: Duration) -> std::io::Result<String> {
     );
     stream.write_all(head.as_bytes())?;
     stream.flush()?;
+    Ok(stream)
+}
 
+/// The body of the reply to a request sent.
+pub fn reply(mut stream: TcpStream) -> std::io::Result<String> {
     let mut raw = Vec::new();
     stream.read_to_end(&mut raw)?;
     let text = String::from_utf8_lossy(&raw);
@@ -44,6 +49,19 @@ pub fn get(url: &str, timeout: Duration) -> std::io::Result<String> {
             "no header terminator in response",
         )),
     }
+}
+
+/// The body of the reply to a GET.
+pub fn get(url: &str, timeout: Duration) -> std::io::Result<String> {
+    reply(send(url, timeout)?)
+}
+
+/// True for the error a reply ends in when it did not come in time.
+pub fn timed_out(e: &std::io::Error) -> bool {
+    matches!(
+        e.kind(),
+        std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+    )
 }
 
 #[cfg(test)]

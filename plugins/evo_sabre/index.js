@@ -15,6 +15,8 @@ var form = require('./lib/form');
 var SERVICE = 'evosabre-panel.service';
 var REMOTE_STATUS = '/run/evosabre-panel/remote.json';
 var USERCONFIG = '/boot/userconfig.txt';
+var SPI_DEVICE = '/dev/spidev0.0';
+var RC_DEVICES = '/sys/class/rc';
 var BOOT_MARK = '# >>> audiophonics_evo_sabre';
 var id = 'audiophonics_evo_sabre: ';
 
@@ -146,13 +148,13 @@ EvoSabre.prototype.reloadDisplay = function () {
 };
 
 // The display and the receiver are switched on in the boot configuration,
-// which the installer wrote; until the player has restarted on it, neither
-// is there. Asked once per start, and only when that is the case.
+// which the installer wrote; until the player has restarted on it, one or
+// both are not there. Asked once per start, and only when that is the case.
 EvoSabre.prototype.askRestartIfNeeded = function () {
     var self = this;
     var written = false;
     try { written = fs.readFileSync(USERCONFIG, 'utf8').indexOf(BOOT_MARK) !== -1; } catch (e) { /* no boot configuration here */ }
-    if (!written || fs.existsSync('/dev/spidev0.0')) {
+    if (!written || (fs.existsSync(SPI_DEVICE) && remote.receiverPresent(RC_DEVICES))) {
         return;
     }
     self.commandRouter.broadcastMessage('openModal', {
@@ -221,7 +223,11 @@ EvoSabre.prototype.saveDisplay = function (data) {
         return libQ.resolve();
     }
     if (form.isOn(self.config.get('oled_active'), true) !== was) {
-        return self.applyService();
+        // A display just switched on starts before the store has written
+        // what was saved with it; it is told to read again once it has.
+        return self.applyService().then(function () {
+            self.reloadDisplay();
+        });
     }
     self.reloadDisplay();
     return libQ.resolve();

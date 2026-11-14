@@ -17,8 +17,9 @@
 //! A player that does not answer is not an error: Volumio restarts, and the
 //! panel outlives it. The process exits only for a display it cannot open
 //! or a bus write that fails, each said plainly, each retried by systemd
-//! within its start limit. A receiver it cannot find is reported once and
-//! the panel carries on without the remote.
+//! within its start limit. A receiver that is not there is reported once and
+//! looked for again every few seconds, since at boot the panel may be up
+//! before it; the panel carries on without the remote meanwhile.
 
 mod config;
 mod farewell;
@@ -37,11 +38,11 @@ mod text;
 mod unifont;
 
 use audiophonics_base::clock::Clock;
-use audiophonics_base::idle::{Idle, Level};
+use audiophonics_base::idle::{Idle, Level, Playing};
 use audiophonics_base::{board, debug, error, info, log, net};
 use audiophonics_player::probe::{Probe, Report};
 use audiophonics_player::{Player, Volumio};
-use audiophonics_remote::{rc, reader, Event, Press};
+use audiophonics_remote::{rc, reader, Event, Press, Reading};
 use config::Config;
 use frame::Frame;
 use keys::Action;
@@ -72,6 +73,15 @@ usage: evosabre-panel [--config FILE]
 const SCROLL_FRAME: Duration = Duration::from_millis(1000 / scroll::SPEED as u64);
 /// How often the address is looked up again, in polls.
 const ADDRESS_EVERY: u32 = 10;
+/// How often the time zone is read again, in polls: it may be changed while
+/// the panel runs.
+const ZONE_EVERY: u32 = 120;
+/// How long after the player last played it still counts as playing, for
+/// the burn-in policy: the player reports a stop between two tracks.
+const REST_GRACE: Duration = Duration::from_secs(10);
+/// How often a receiver that is not there yet, or a decoder that is off, is
+/// looked at again.
+const LOOK_AGAIN: Duration = Duration::from_secs(5);
 
 /// What the loop wakes for besides time.
 enum Msg {
@@ -163,65 +173,113 @@ fn raised_by(signals: &[i32]) -> Result<Arc<AtomicBool>, String> {
     Ok(flag)
 }
 
-/// Find the receiver, see its decoder on, and start reading it. Returns
-/// whether it is being read, and what became of it in a sentence.
-fn start_remote(tx: &Sender<Msg>) -> (bool, String) {
-    let receiver = match rc::find() {
-        Ok(r) => r,
-        Err(e) => {
-            error!("remote: {e}");
-            return (false, format!("not found: {e}"));
-        }
-    };
-    let decoder = match rc::ensure_decoder(&receiver) {
-        rc::Decoder::On => {
-            info!("remote: {} decodes nec", receiver.name);
-            None
-        }
-        rc::Decoder::SwitchedOn => {
-            info!("remote: nec switched on for {}", receiver.name);
-            None
-        }
-        rc::Decoder::Off { enabled, why } => {
-            error!(
-                "remote: {} does not decode nec (on: {enabled}) and it could not be switched on: {why}",
-                receiver.name
-            );
-            Some(format!(
-                ", but its nec decoder is off and could not be switched on: {why}"
-            ))
-        }
-    };
-    // Read it even with the decoder off: it may be switched on from
-    // outside, and the buttons then arrive without a restart.
-    match reader::spawn(receiver.event.clone(), tx.clone(), Msg::Remote) {
-        Ok(()) => {
-            info!(
-                "remote: reading {} at {}",
-                receiver.name,
-                receiver.event.display()
-            );
-            (
-                true,
-                format!(
-                    "reading {} at {}{}",
-                    receiver.name,
-                    receiver.event.display(),
-                    decoder.unwrap_or_default()
-                ),
-            )
-        }
-        Err(e) => {
-            error!("remote: {e}");
-            (
-                false,
-                format!("{} found, but it cannot be read: {e}", receiver.name),
-            )
-        }
-    }
+const REMOTE_OFF: &str = "switched off on the settings page";
+
+/// The remote as the loop keeps it: whether it is being read and how, what
+/// there is to say of it, and when to look at it again.
+struct Remote {
+    receiver: Option<rc::Receiver>,
+    reading: Option<Reading>,
+    decoder_on: bool,
+    line: String,
+    look_again: Instant,
 }
 
-const REMOTE_OFF: &str = "switched off on the settings page";
+impl Remote {
+    fn new(now: Instant) -> Self {
+        Self {
+            receiver: None,
+            reading: None,
+            decoder_on: false,
+            line: "not looked for yet".to_string(),
+            look_again: now,
+        }
+    }
+
+    /// True when there is something to look at again: a receiver not yet
+    /// read, or one whose decoder is off.
+    fn due(&self, now: Instant) -> bool {
+        now >= self.look_again && !(self.reading.is_some() && self.decoder_on)
+    }
+
+    /// Find the receiver and start reading it, or, where it is read
+    /// already, see whether its decoder has come on. What became of it is
+    /// said once, when it changes.
+    fn look(&mut self, tx: &Sender<Msg>, now: Instant) {
+        self.look_again = now + LOOK_AGAIN;
+        if self.reading.is_none() {
+            if let Err(e) = self.start(tx) {
+                self.say(e);
+                return;
+            }
+        }
+        let line = self.describe();
+        self.say(line);
+    }
+
+    fn start(&mut self, tx: &Sender<Msg>) -> Result<(), String> {
+        let receiver = rc::find().map_err(|e| format!("not found: {e}"))?;
+        let reading = reader::spawn(&receiver, tx.clone(), Msg::Remote)
+            .map_err(|e| format!("{} found, but it cannot be read: {e}", receiver.name))?;
+        self.receiver = Some(receiver);
+        self.reading = Some(reading);
+        Ok(())
+    }
+
+    /// The receiver being read, in a sentence, with its decoder seen to.
+    fn describe(&mut self) -> String {
+        let (Some(receiver), Some(reading)) = (&self.receiver, &self.reading) else {
+            return self.line.clone();
+        };
+        let mut line = match reading {
+            Reading::Frames => format!(
+                "reading {} at {}",
+                receiver.name,
+                receiver
+                    .lirc
+                    .as_deref()
+                    .unwrap_or(&receiver.event)
+                    .display()
+            ),
+            Reading::Scancodes { why } => format!(
+                "reading {} at {} ({why}; a repeat with no frame before it reads as a press)",
+                receiver.name,
+                receiver.event.display()
+            ),
+        };
+        match rc::ensure_decoder(receiver) {
+            rc::Decoder::On | rc::Decoder::SwitchedOn => self.decoder_on = true,
+            rc::Decoder::Off { enabled, why } => {
+                self.decoder_on = false;
+                line.push_str(&format!(
+                    ", but its nec decoder is off (on: {enabled}) and could not be switched on: {why}"
+                ));
+            }
+        }
+        line
+    }
+
+    fn say(&mut self, line: String) {
+        if line == self.line {
+            return;
+        }
+        if self.reading.is_some() && self.decoder_on {
+            info!("remote: {line}");
+        } else {
+            error!("remote: {line}");
+        }
+        self.line = line;
+    }
+
+    /// The device stopped answering: look for it afresh.
+    fn lost(&mut self, why: &str, now: Instant) {
+        self.receiver = None;
+        self.reading = None;
+        self.decoder_on = false;
+        self.look_again = now + LOOK_AGAIN;
+        self.say(format!("the receiver stopped answering: {why}"));
+    }
+}
 
 /// A frame from the handset: said in the journal, noted for the settings
 /// page, and obeyed where it is one of the keys the streamer takes. Returns
@@ -299,49 +357,30 @@ fn run(path: &str) -> Result<(), String> {
 
     let (tx, rx) = mpsc::channel::<Msg>();
     let mut status = Status::new();
-    let (mut remote_read, mut remote_line) = if cfg.remote {
-        start_remote(&tx)
-    } else {
-        (false, REMOTE_OFF.to_string())
-    };
-    status.receiver(remote_line.clone());
+    let mut remote = Remote::new(greeted_at);
+    if !cfg.remote {
+        status.receiver(REMOTE_OFF);
+    }
 
     let mut volumio = Volumio::new(cfg.player_base.clone(), cfg.request_timeout);
     let mut probe = Probe::default();
     let mut screen = layout::Playing::default();
     let mut selector = layout::Selector::default();
     let mut font = Unifont::new(&cfg.unifont_path);
-    let (clock, warning) = Clock::new();
+    let (mut clock, warning) = Clock::new();
     if let Some(w) = warning {
         error!("{w}");
     }
     let mut ip = net::address().unwrap_or_else(|| "no network".into());
     let mut polls: u32 = 0;
     let mut idle = Idle::new(greeted_at, cfg.dim_after, cfg.blank_after);
+    let mut steady = Playing::new(REST_GRACE);
     let mut level = Level::Full;
     let mut greeting_up = true;
     let mut moving = false;
     let mut next_poll = Instant::now();
 
     loop {
-        if stop.load(Ordering::Relaxed) {
-            match farewell::at_stop(leaving) {
-                farewell::AtStop::Blank => {
-                    panel.sleep().map_err(display)?;
-                    info!("stopping: panel blanked");
-                }
-                farewell::AtStop::Keep => {
-                    info!("stopping: farewell left on the glass for the greeting to replace");
-                }
-                farewell::AtStop::HoldThenBlank => {
-                    std::thread::sleep(farewell::HOLD);
-                    panel.sleep().map_err(display)?;
-                    info!("stopping: goodbye said, panel blanked");
-                }
-            }
-            return Ok(());
-        }
-
         // The settings page saved something: read the store again. What is
         // only read at start, the wiring, waits for the next start.
         if reload.swap(false, Ordering::Relaxed) {
@@ -362,14 +401,13 @@ fn run(path: &str) -> Result<(), String> {
                 Level::Dim => panel.set_contrast(new.dimmed()).map_err(display)?,
                 Level::Blank => {}
             }
-            if new.remote && !remote_read {
-                (remote_read, remote_line) = start_remote(&tx);
-            }
-            status.receiver(if new.remote {
-                remote_line.clone()
+            if new.remote {
+                remote.look_again = Instant::now();
+                status.receiver(remote.line.clone());
             } else {
-                REMOTE_OFF.to_string()
-            });
+                status.receiver(REMOTE_OFF);
+            }
+            (clock, _) = Clock::new();
             cfg = new;
             info!("settings read again");
         }
@@ -407,6 +445,24 @@ fn run(path: &str) -> Result<(), String> {
                 leaving = Some(way);
             }
         }
+        if stop.load(Ordering::Relaxed) {
+            match farewell::at_stop(leaving) {
+                farewell::AtStop::Blank => {
+                    panel.sleep().map_err(display)?;
+                    info!("stopping: panel blanked");
+                }
+                farewell::AtStop::Keep => {
+                    info!("stopping: farewell left on the glass for the greeting to replace");
+                }
+                farewell::AtStop::HoldThenBlank => {
+                    std::thread::sleep(farewell::HOLD);
+                    panel.sleep().map_err(display)?;
+                    info!("stopping: goodbye said, panel blanked");
+                }
+            }
+            return Ok(());
+        }
+
         if leaving.is_some() {
             // Nothing to draw and nothing to obey; wait for the stop.
             match rx.recv_timeout(Duration::from_millis(200)) {
@@ -419,16 +475,24 @@ fn run(path: &str) -> Result<(), String> {
         }
 
         let now = Instant::now();
+        if cfg.remote && remote.due(now) {
+            remote.look(&tx, now);
+            status.receiver(remote.line.clone());
+        }
         if now >= next_poll {
             match probe.observe(volumio.state()) {
                 Some(Report::Changed(line)) => info!("{line}"),
                 Some(Report::Outage(line)) => error!("{line}"),
                 None => {}
             }
-            idle.player(now, probe.state().is_some_and(|s| s.is_playing()));
+            let playing = probe.state().is_some_and(|s| s.is_playing());
+            idle.player(now, steady.observe(now, playing));
             polls += 1;
             if polls.is_multiple_of(ADDRESS_EVERY) {
                 ip = net::address().unwrap_or_else(|| "no network".into());
+            }
+            if polls.is_multiple_of(ZONE_EVERY) {
+                (clock, _) = Clock::new();
             }
             next_poll = now + cfg.poll_interval;
         }
@@ -510,10 +574,8 @@ fn run(path: &str) -> Result<(), String> {
                             }
                         }
                         Msg::Remote(Event::Lost(why)) => {
-                            error!("remote: the receiver stopped answering: {why}");
-                            remote_read = false;
-                            remote_line = format!("lost: {why}");
-                            status.receiver(remote_line.clone());
+                            remote.lost(&why, now);
+                            status.receiver(remote.line.clone());
                         }
                     }
                 }

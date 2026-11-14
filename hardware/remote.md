@@ -4,13 +4,16 @@ The EVO Sabre and the RaspDac Mini LCD ship the same infrared handset. Its frame
 
 ## Receiving it
 
-The receiver is wired to a GPIO and described to the kernel by the `gpio-ir` overlay. The kernel's own NEC decoder turns each frame into a scancode and reports it on the receiver's input device, once when a key goes down and again for each repeat the handset sends while it is held, about nine a second.
+The receiver is wired to a GPIO and described to the kernel by the `gpio-ir` overlay. The kernel's own NEC decoder turns what it hears into scancodes: the frame a key sends when it goes down, and the short repeat frames that follow about nine times a second while it is held. A repeat frame names no key; the kernel answers it with the scancode of the last frame it decoded.
 
-The decoder has to be switched on for the receiver: the overlay's default key table switches on RC-6 alone. A udev rule the plugins install asks for it whenever the receiver appears:
+The programs read the receiver's own device, `/dev/lirc0`, set to hand over decoded frames. Each record says whether it is a key's frame or a repeat, so a repeat counts only when the frame of its key came just before it, and one with no frame before it, which is what a first frame lost to noise leaves behind, is passed over. Where that device cannot be opened, the receiver's input device is read instead; it reports frames and repeats alike as bare scancodes, and a repeat with no frame before it then reads as a press of the last key decoded.
+
+Two things have to be so for the receiver, and the udev rules the plugins install see to both whenever it appears. The decoder has to be switched on, since the overlay's default key table switches on RC-6 alone; and the device has to be open to the `input` group, which the programs' services have:
 
     ACTION=="add|change", SUBSYSTEM=="rc", ENV{DRV_NAME}=="gpio_ir_recv", ATTR{protocols}="+nec"
+    ACTION=="add|change", SUBSYSTEM=="lirc", DRIVERS=="gpio_ir_recv", GROUP="input", MODE="0660"
 
-To see what a receiver decodes, and to watch scancodes arrive:
+To see what a receiver decodes, and to watch keys arrive:
 
     cat /sys/class/rc/rc*/protocols        the decoders; those switched on are in [brackets]
     journalctl -u evosabre-panel -f        with the plugin's journal set to Changes

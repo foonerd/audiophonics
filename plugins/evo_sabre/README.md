@@ -27,7 +27,7 @@ The volume, the mute, the input and the power keys are read by the DAC board its
 
 Install the plugin from Volumio's plugin store, under System Hardware, and enable it. The first installation switches on the SPI bus and the remote's receiver in the boot configuration: **restart the player once** when the plugin asks.
 
-Installing over version 2 of the plugin replaces it; your settings are kept.
+Installing over version 2 of the plugin replaces it and starts the new display at once; your settings are kept. Restart the player afterwards to finish the update: until then the settings page is still version 2's.
 
 ## Settings
 
@@ -60,7 +60,7 @@ It says which board it found, how it opened the display, what the player is doin
 
 **The display stays dark after installing.** Restart the player: the SPI bus is switched on in the boot configuration, which is read at start.
 
-**The remote does nothing.** Press a key, then Check the remote on the settings page. *Not found* means the receiver's overlay is not loaded: restart the player. A receiver that is read but reports no key has not had its decoder switched on:
+**The remote does nothing.** Press a key, then Check the remote on the settings page. *Not found* means the receiver's overlay is not loaded: restart the player. The display looks for the receiver again every few seconds, so one that comes up late is picked up. A receiver that is read but reports no key has not had its decoder switched on:
 
     cat /sys/class/rc/rc*/protocols
 
@@ -68,7 +68,7 @@ It says which board it found, how it opened the display, what the player is doin
 
 ## What it installs
 
-Outside its own folder, the plugin installs a systemd unit (`evosabre-panel.service`), a udev rule for the receiver's decoder, a sudoers entry for switching the service, and a marked block of two lines in `/boot/userconfig.txt`. Uninstalling removes all four.
+Outside its own folder, the plugin installs a systemd unit (`evosabre-panel.service`), udev rules for the receiver's decoder and its device, a sudoers entry for switching the service, and a marked block of two lines in `/boot/userconfig.txt`. Uninstalling removes all four.
 
 ## Credits
 

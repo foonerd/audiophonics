@@ -22,6 +22,9 @@ dependencies = [
 [[package]]
 name = "audiophonics-remote"
 version = "0.1.0"
+dependencies = [
+ "libc",
+]
 
 [[package]]
 name = "autocfg"
@@ -100,7 +103,7 @@ dependencies = [
 
 [[package]]
 name = "evosabre-panel"
-version = "3.0.0"
+version = "2.99.0"
 dependencies = [
  "audiophonics-base",
  "audiophonics-player",

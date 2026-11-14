@@ -81,6 +81,30 @@ impl Idle {
     }
 }
 
+/// Whether the player counts as playing, for the burn-in policy: it does
+/// while it plays and for `grace` afterwards, so the moment between two
+/// tracks, when the player reports a stop, is not the end of playback and
+/// the track that follows is not a touch.
+#[derive(Debug)]
+pub struct Playing {
+    grace: Duration,
+    last: Option<Instant>,
+}
+
+impl Playing {
+    pub fn new(grace: Duration) -> Self {
+        Self { grace, last: None }
+    }
+
+    pub fn observe(&mut self, now: Instant, playing: bool) -> bool {
+        if playing {
+            self.last = Some(now);
+        }
+        self.last
+            .is_some_and(|at| now.saturating_duration_since(at) < self.grace)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -150,5 +174,35 @@ mod tests {
     #[test]
     fn levels_read_as_journal_words() {
         assert_eq!(Level::Blank.to_string(), "blank");
+    }
+
+    #[test]
+    fn the_gap_between_two_tracks_is_not_a_stop_and_a_real_stop_is() {
+        let t0 = Instant::now();
+        let at = |secs: u64| t0 + Duration::from_secs(secs);
+        let mut p = Playing::new(Duration::from_secs(10));
+        assert!(!p.observe(at(0), false), "nothing has played yet");
+        assert!(p.observe(at(1), true));
+        assert!(p.observe(at(2), false), "between tracks");
+        assert!(p.observe(at(3), true));
+        assert!(p.observe(at(12), false), "nine seconds stopped");
+        assert!(!p.observe(at(13), false), "ten: a stop");
+        assert!(p.observe(at(14), true), "and playing again");
+    }
+
+    #[test]
+    fn a_track_change_neither_blanks_a_dim_panel_nor_wakes_it() {
+        let t0 = Instant::now();
+        let at = |secs: u64| t0 + Duration::from_secs(secs);
+        let mut steady = Playing::new(Duration::from_secs(10));
+        let mut idle = Idle::new(t0, Duration::from_secs(120), Duration::from_secs(600));
+        idle.player(at(1), steady.observe(at(1), true));
+        // Two hours of radio, then one poll that says stop, then play.
+        assert_eq!(idle.level(at(7200)), Level::Dim);
+        idle.player(at(7200), steady.observe(at(7200), true));
+        idle.player(at(7201), steady.observe(at(7201), false));
+        assert_eq!(idle.level(at(7201)), Level::Dim, "not dark for a moment");
+        idle.player(at(7202), steady.observe(at(7202), true));
+        assert_eq!(idle.level(at(7202)), Level::Dim, "and not back to full");
     }
 }

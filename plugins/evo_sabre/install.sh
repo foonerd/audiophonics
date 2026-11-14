@@ -15,6 +15,8 @@ SUDOERS="/etc/sudoers.d/volumio-user-audiophonics_evo_sabre"
 USERCONFIG="/boot/userconfig.txt"
 MARK_BEGIN="# >>> audiophonics_evo_sabre"
 MARK_END="# <<< audiophonics_evo_sabre"
+PLUGINS="/data/configuration/plugins.json"
+SETTINGS="/data/configuration/system_hardware/audiophonics_evo_sabre/config.json"
 
 # A refused install leaves nothing behind, so the next attempt starts clean.
 refuse() {
@@ -37,6 +39,28 @@ if ! VERSION=$("$BIN" --version 2>/dev/null); then
   refuse "ERROR: the display's program does not run on this machine ($(uname -m)); the EVO Sabre is a Raspberry Pi"
 fi
 echo "Program: $VERSION"
+
+# =============================================================================
+# CHECK: whether this is an update of a plugin in use. Volumio's own record
+# says whether the plugin is enabled, and the plugin's settings whether the
+# display is switched on; version 2's display service, still running, says
+# the same of it. Each file is read with its layout taken out, so it does not
+# matter how it was written.
+# =============================================================================
+flat() {
+  tr -d ' \t\r\n' < "$1" 2>/dev/null
+}
+IN_USE=0
+if [ -f "$PLUGINS" ] && flat "$PLUGINS" | grep -q '"audiophonics_evo_sabre":{"enabled":{[^}]*"value":"\{0,1\}true'; then
+  IN_USE=1
+fi
+if systemctl is-active --quiet evo_oled2.service 2>/dev/null; then
+  IN_USE=1
+fi
+DISPLAY_ON=1
+if [ -f "$SETTINGS" ] && flat "$SETTINGS" | grep -q '"oled_active":{[^}]*"value":"\{0,1\}false'; then
+  DISPLAY_ON=0
+fi
 
 # =============================================================================
 # REPLACE: what version 2 of this plugin installed. Its three services ran
@@ -73,6 +97,10 @@ if [ -f /boot/config.txt ]; then
     echo "dtoverlay=gpio-ir,gpio_pin=4" >> "$block"
   fi
   if [ -s "$block" ]; then
+    # A file whose last line has no end would have the mark joined to it.
+    if [ -s "$outside" ] && [ -n "$(tail -c 1 "$outside")" ]; then
+      echo >> "$outside"
+    fi
     {
       echo "$MARK_BEGIN"
       cat "$block"
@@ -90,13 +118,14 @@ else
 fi
 
 # =============================================================================
-# SETUP: the receiver decodes the handset's frames. The rule asks for the NEC
-# decoder whenever the receiver appears; the trigger asks for it now, on a
-# player whose receiver is already there.
+# SETUP: the receiver decodes the handset's frames and the display's service
+# may read them. The rules ask for the NEC decoder and for the receiver's
+# device to belong to the input group whenever the receiver appears; the
+# trigger asks for both now, on a player whose receiver is already there.
 # =============================================================================
 install -m 644 "$PLUGIN_DIR/udev/70-evosabre-remote.rules" "$RULES"
 udevadm control --reload 2>/dev/null || true
-udevadm trigger --action=change --subsystem-match=rc 2>/dev/null || true
+udevadm trigger --action=change --subsystem-match=rc --subsystem-match=lirc 2>/dev/null || true
 
 # =============================================================================
 # SETUP: the groups the service takes for the SPI bus, the GPIO lines and the
@@ -136,8 +165,21 @@ systemctl daemon-reload
 
 chown -R volumio:volumio "$PLUGIN_DIR"
 
+# An update of a plugin in use: Volumio goes on running the previous
+# version's code until the player restarts and starts nothing of the new
+# one, so the display is started here rather than left dark until then.
+if [ "$IN_USE" = 1 ] && [ "$DISPLAY_ON" = 1 ]; then
+  if systemctl enable --now "$SERVICE.service" 2>/dev/null; then
+    echo "The display is running the new version"
+  else
+    echo "WARNING: the display's service did not start; it will when the player restarts"
+  fi
+fi
+
 echo "Audiophonics Evo Sabre installed"
 if [ "$REBOOT" = 1 ]; then
   echo "Restart the player once: the display and the remote come up on the new boot configuration"
+elif [ "$IN_USE" = 1 ]; then
+  echo "Restart the player to finish the update: until then the plugin's settings page is the previous version's"
 fi
 echo "plugininstallend"

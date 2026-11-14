@@ -2,6 +2,9 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const remote = require('../lib/remote');
 const en = require('../i18n/strings_en.json').EVOSABRE;
 
@@ -31,4 +34,16 @@ test('no key yet, a receiver not found, and a decoder that is off', () => {
     const deaf = remote.describe({ receiver: 'reading rc0 at /dev/input/event4, but its nec decoder is off and could not be switched on: Permission denied' }, 1, strings);
     assert.equal(deaf.reading, false);
     assert.equal(remote.describe({}, 1, strings).reading, false);
+});
+
+test('the receiver is there when a remote-control device is driven by gpio_ir_recv', () => {
+    const devices = fs.mkdtempSync(path.join(os.tmpdir(), 'evosabre-rc-'));
+    fs.mkdirSync(path.join(devices, 'rc0'));
+    fs.writeFileSync(path.join(devices, 'rc0', 'uevent'), 'NAME=rc-cec\nDRV_NAME=cec\nDEV_NAME=vc4-hdmi-0\n');
+    assert.equal(remote.receiverPresent(devices), false, 'only the HDMI port');
+    fs.mkdirSync(path.join(devices, 'rc1'));
+    fs.writeFileSync(path.join(devices, 'rc1', 'uevent'), 'NAME=rc-rc6-mce\nDRV_NAME=gpio_ir_recv\nDEV_NAME=gpio_ir_recv\n');
+    assert.equal(remote.receiverPresent(devices), true);
+    assert.equal(remote.receiverPresent(path.join(devices, 'absent')), false);
+    fs.rmSync(devices, { recursive: true });
 });

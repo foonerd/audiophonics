@@ -23,12 +23,20 @@ impl Volumio {
         format!("{}{}", self.base, suffix)
     }
 
+    /// Ask the player for something. The player answers a command when
+    /// what it started has settled, which a stream slow to open takes its
+    /// time over; the request has gone out whole by then, so an answer that
+    /// does not come in time is not a failure.
     fn command(&self, query: &str) -> Result<()> {
-        http::get(
+        let sent = http::send(
             &self.url(&format!("/api/v1/commands?cmd={query}")),
             self.timeout,
         )?;
-        Ok(())
+        match http::reply(sent) {
+            Ok(_) => Ok(()),
+            Err(e) if http::timed_out(&e) => Ok(()),
+            Err(e) => Err(e.into()),
+        }
     }
 }
 
@@ -56,5 +64,86 @@ impl Player for Volumio {
 
     fn set_volume(&self, percent: u8) -> Result<()> {
         self.command(&format!("volume&volume={}", percent.min(100)))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+
+    /// A player on loopback that takes one request and answers it with
+    /// `body` after `delay`, or never when there is no body.
+    fn player(
+        body: Option<&'static str>,
+        delay: Duration,
+    ) -> (String, std::thread::JoinHandle<String>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let served = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0u8; 1024];
+            let n = stream.read(&mut request).unwrap();
+            std::thread::sleep(delay);
+            if let Some(body) = body {
+                let _ = write!(
+                    stream,
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{body}"
+                );
+            }
+            String::from_utf8_lossy(&request[..n]).into_owned()
+        });
+        (base, served)
+    }
+
+    #[test]
+    fn the_state_is_read_from_the_players_answer() {
+        let (base, served) = player(Some(r#"{"status":"play","title":"Aria"}"#), Duration::ZERO);
+        let state = Volumio::new(base, Duration::from_millis(500))
+            .state()
+            .unwrap();
+        assert_eq!(state.title, "Aria");
+        assert!(served
+            .join()
+            .unwrap()
+            .starts_with("GET /api/v1/getState HTTP/1.1"));
+    }
+
+    #[test]
+    fn a_command_is_sent_as_the_player_names_it() {
+        let (base, served) = player(Some(r#"{"response":"ok"}"#), Duration::ZERO);
+        Volumio::new(base, Duration::from_millis(500))
+            .seek(Seek::Forward)
+            .unwrap();
+        assert!(served
+            .join()
+            .unwrap()
+            .starts_with("GET /api/v1/commands?cmd=seek&position=plus HTTP/1.1"));
+    }
+
+    #[test]
+    fn a_command_the_player_is_slow_to_answer_has_still_been_sent() {
+        let (base, served) = player(None, Duration::from_millis(400));
+        let player = Volumio::new(base, Duration::from_millis(100));
+        assert!(player.transport(Transport::Toggle).is_ok());
+        assert!(served.join().unwrap().contains("cmd=toggle"));
+    }
+
+    #[test]
+    fn a_state_the_player_is_slow_to_give_is_an_error_and_so_is_no_player_at_all() {
+        let (base, served) = player(None, Duration::from_millis(400));
+        assert!(Volumio::new(base, Duration::from_millis(100))
+            .state()
+            .is_err());
+        served.join().unwrap();
+        // Nothing listens here: the port was bound and let go.
+        let free = TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap();
+        let gone = Volumio::new(format!("http://{free}"), Duration::from_millis(100));
+        assert!(gone.transport(Transport::Next).is_err());
+        assert!(gone.state().is_err());
     }
 }

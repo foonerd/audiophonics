@@ -4,8 +4,9 @@
 //! a GPIO is the one driven by `gpio_ir_recv`; a Raspberry Pi also lists
 //! its HDMI ports there, for the television's own remote. The directory
 //! names the decoders the kernel can run for the device, the ones switched
-//! on in square brackets, and holds the input device its scancodes arrive
-//! on.
+//! on in square brackets, and holds the two devices its frames can be read
+//! from: its own, which tells a key's frame from the repeats that follow
+//! it, and an input device, which does not.
 
 use std::path::{Path, PathBuf};
 
@@ -21,12 +22,14 @@ pub struct Receiver {
     pub name: String,
     /// The file that lists its decoders and switches them.
     pub protocols: PathBuf,
-    /// The input device its scancodes arrive on.
+    /// The receiver's own device, which hands over decoded frames.
+    pub lirc: Option<PathBuf>,
+    /// The input device its scancodes also arrive on.
     pub event: PathBuf,
 }
 
 pub fn find() -> Result<Receiver, String> {
-    find_in(Path::new("/sys/class/rc"), Path::new("/dev/input"))
+    find_in(Path::new("/sys/class/rc"), Path::new("/dev"))
 }
 
 pub fn find_in(sys: &Path, dev: &Path) -> Result<Receiver, String> {
@@ -46,13 +49,14 @@ pub fn find_in(sys: &Path, dev: &Path) -> Result<Receiver, String> {
             .flat_map(|input| {
                 children(&dir.join(&input), "event")
                     .into_iter()
-                    .map(|event| dev.join(event))
+                    .map(|event| dev.join("input").join(event))
                     .collect::<Vec<_>>()
             })
             .next()
             .ok_or_else(|| format!("{name} has no input device"))?;
         return Ok(Receiver {
             protocols: dir.join("protocols"),
+            lirc: children(&dir, "lirc").first().map(|lirc| dev.join(lirc)),
             name,
             event,
         });
@@ -168,10 +172,13 @@ mod tests {
     #[test]
     fn the_gpio_receiver_is_found_and_the_hdmi_port_is_passed_over() {
         let sys = tree("find");
-        let r = find_in(&sys, Path::new("/dev/input")).unwrap();
+        let r = find_in(&sys, Path::new("/dev")).unwrap();
         assert_eq!(r.name, "rc1");
         assert_eq!(r.event, PathBuf::from("/dev/input/event4"));
+        assert_eq!(r.lirc, Some(PathBuf::from("/dev/lirc0")));
         assert_eq!(r.protocols, sys.join("rc1/protocols"));
+        std::fs::remove_dir_all(sys.join("rc1/lirc0")).unwrap();
+        assert_eq!(find_in(&sys, Path::new("/dev")).unwrap().lirc, None);
         std::fs::remove_dir_all(&sys).unwrap();
     }
 
@@ -179,9 +186,9 @@ mod tests {
     fn a_player_without_the_receiver_says_what_it_has() {
         let sys = tree("absent");
         std::fs::remove_dir_all(sys.join("rc1")).unwrap();
-        let e = find_in(&sys, Path::new("/dev/input")).unwrap_err();
+        let e = find_in(&sys, Path::new("/dev")).unwrap_err();
         assert!(e.contains("gpio_ir_recv") && e.contains("rc0 (cec)"), "{e}");
-        let e = find_in(Path::new("/nonexistent/rc"), Path::new("/dev/input")).unwrap_err();
+        let e = find_in(Path::new("/nonexistent/rc"), Path::new("/dev")).unwrap_err();
         assert!(e.contains("present: none"), "{e}");
         std::fs::remove_dir_all(&sys).unwrap();
     }
@@ -199,7 +206,7 @@ mod tests {
     #[test]
     fn a_decoder_already_on_is_left_and_one_that_stays_off_is_explained() {
         let sys = tree("decoder");
-        let r = find_in(&sys, Path::new("/dev/input")).unwrap();
+        let r = find_in(&sys, Path::new("/dev")).unwrap();
         // A plain file takes the request as its whole content, which then
         // lists nothing in brackets: the request was written and not taken.
         match ensure_decoder(&r) {
