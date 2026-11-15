@@ -75,7 +75,7 @@ A release is one plugin at one version. Its tag is the plugin's folder and the v
 
 A new major version is numbered below itself while it is on the bench: the builds of what became 3.0.0 were 2.99.0, 2.99.1 and so on, and the round number is kept for the first build that has run on the unit and been accepted by the plugin store.
 
-A release to the store carries its settings page in English and in German, Spanish, French, Italian, Japanese, Dutch, Polish, Portuguese, Russian and Chinese; `scripts/check.sh` refuses one that does not. A build for the bench may carry fewer.
+A release to the store carries its settings page in English and in German, Spanish, French, Italian, Japanese, Dutch, Polish, Portuguese, Russian and Chinese; `scripts/check.sh` refuses one that does not. A plugin whose earlier version had other languages carries those too, named in its `build.conf`: the RaspDacMini LCD plugin is also in Czech, Danish, Finnish, Hungarian and Swedish. A build for the bench may carry fewer.
 
 The tag runs the check, builds the program, packages the plugin and publishes the zip with its SHA-256 as a pre-release, with that version's section of the plugin's changelog as the notes. A build for the bench stays a pre-release; a release to the store becomes the latest release once its zip has been looked at:
 

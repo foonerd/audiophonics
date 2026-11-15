@@ -78,7 +78,9 @@ for conf in plugins/*/build.conf; do
 done
 
 # The languages a release to the store carries beside English: the set the
-# house's other plugins ship.
+# house's other plugins ship. A plugin that had more before carries those
+# too, so that nobody loses theirs to an update: MORE_LANGUAGES in its
+# build.conf names them.
 STORE_LANGUAGES="de es fr it ja nl pl pt ru zh"
 
 # Node runs the checks of the plugins' files: here where it is installed,
@@ -176,14 +178,18 @@ console.log((files.length - 1) + ' language files complete');
 JS
 
   # A build for the bench (x.99.z) may carry fewer languages than a release
-  # to the store, which carries the set the house's other plugins do.
+  # to the store, which carries the set the house's other plugins do, and
+  # whatever more the plugin's build.conf names.
   version=$(sed -n 's/^ *"version": "\(.*\)",*$/\1/p' "$plugin/package.json" | head -n1)
+  MORE_LANGUAGES=
+  conf="${plugin%/}/build.conf"
+  . "$conf"
   case "$version" in
     *.99.*) ;;
     *)
-      for lang in $STORE_LANGUAGES; do
+      for lang in $STORE_LANGUAGES $MORE_LANGUAGES; do
         if [ ! -f "$plugin/i18n/strings_$lang.json" ]; then
-          echo "check: $plugin $version is a release to the store and has no strings_$lang.json (it carries: $STORE_LANGUAGES)" >&2
+          echo "check: $plugin $version is a release to the store and has no strings_$lang.json (it carries: $STORE_LANGUAGES $MORE_LANGUAGES)" >&2
           exit 1
         fi
       done

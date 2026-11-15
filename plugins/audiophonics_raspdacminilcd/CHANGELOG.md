@@ -17,7 +17,7 @@ A rewrite of version 1. The display and the remote are now one small native prog
 - **Text in any script**: DejaVu Sans, with Chinese, Japanese and Korean from GNU Unifont on the same line.
 - **Covers** in JPEG, PNG, GIF, WebP, BMP and SVG. Each is fetched and decoded by a second process, so a cover that cannot be read costs the cover and nothing else. A cover that fails is tried again; the cover of the track before does not stay up over a track that has none.
 - **The remote is read from the kernel's own decoder.** Every key does what it did, with three differences: Option turns repeat over, and shuffle when it is held, where it turned both over at once; Power shuts the player down through Volumio, so every plugin is told first; and the DAC's input is followed when it is changed from elsewhere.
-- **The settings page** is in English, German, Spanish, French, Italian, Japanese, Dutch, Polish, Portuguese, Russian and Chinese.
+- **The settings page** is in sixteen languages: English, Chinese, Czech, Danish, Dutch, Finnish, French, German, Hungarian, Italian, Japanese, Polish, Portuguese, Russian, Spanish and Swedish. Every language version 1 had is still there.
 - **Black after** 0 now means never, as its description always said. A saved setting takes effect at once.
 - **No listener on the network.** Version 1's display answered commands from anywhere on port 4153; this one opens no port.
 - **Installing over version 1** removes its five services, its scripts, its sudoers entry, its overlay and its lines in the boot configuration, gives back the lirc services and the boot splash it had masked, keeps your settings, and starts the new display at once. Restart the player afterwards to finish the update.
