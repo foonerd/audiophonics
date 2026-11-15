@@ -22,10 +22,8 @@ spidev = "0.7"
 gpio-cdev = "0.6"
 signal-hook = { version = "0.3", default-features = false }
 serde_json.workspace = true
-# The meters. What the audio tap measured is read from its ring with the
-# tap's own reader, from the Glass repository where evotap is built; the
-# ring's layout is a contract between the two.
-tap = { git = "https://github.com/foonerd/glass", tag = "v0.11.47" }
+# The meters: the tap's levels and a meter's movement.
+audiophonics-meters = { path = "../../crates/meters" }
 
 [dev-dependencies]
 audiophonics-unifont = { path = "../../crates/unifont", features = ["sample"] }

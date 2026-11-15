@@ -37,10 +37,10 @@ test('the chain carries the tap once Volumio has written it in', () => {
     assert.equal(tap.inChain(undefined), false);
 });
 
-// The display looks for rings of this tag; see the panel's levels module.
+// The display looks for rings of this tag: the panel's program names it.
 test('the tag is the one the display reads', () => {
     const fs = require('fs');
     const path = require('path');
-    const levels = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'bins', 'evosabre-panel', 'src', 'levels.rs'), 'utf8');
-    assert.ok(levels.indexOf('pub const TAG: &str = "' + tap.TAG + '";') !== -1);
+    const program = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'bins', 'evosabre-panel', 'src', 'main.rs'), 'utf8');
+    assert.ok(program.indexOf('const TAP_TAG: &str = "' + tap.TAG + '";') !== -1);
 });

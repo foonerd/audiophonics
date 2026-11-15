@@ -28,8 +28,6 @@ mod grey;
 mod icons;
 mod keys;
 mod layout;
-mod levels;
-mod meters;
 mod orbit;
 mod render;
 mod scroll;
@@ -40,6 +38,7 @@ mod text;
 use audiophonics_base::clock::Clock;
 use audiophonics_base::idle::{Idle, Level, Playing};
 use audiophonics_base::{board, debug, error, info, leaving as farewell, log, net};
+use audiophonics_meters::{self as meters, levels};
 use audiophonics_player::probe::{Probe, Report};
 use audiophonics_player::{Player, Volumio};
 use audiophonics_remote::watch::{self, Watch};
@@ -56,6 +55,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 const NAME: &str = "evosabre-panel";
+/// The tag the plugin's ALSA contribution gives its tap, and so the one in
+/// the names of the rings the meters read.
+const TAP_TAG: &str = "evosabre";
 
 const USAGE: &str = "\
 usage: evosabre-panel [--config FILE]
@@ -160,7 +162,7 @@ fn main() -> ExitCode {
 /// What the meters would show, said four times a second for ten seconds:
 /// the tap's ring as the display reads it, for a look without the glass.
 fn say_levels() -> Result<(), String> {
-    let mut source = levels::Source::new();
+    let mut source = levels::Source::new(TAP_TAG);
     let mut needles = meters::Meters::default();
     let started = Instant::now();
     let mut said = started;
@@ -202,8 +204,8 @@ fn say_levels() -> Result<(), String> {
         Err(format!(
             "nothing was published under {} for the tag {} in ten seconds: \
              nothing is playing, or the tap is not in the player's audio path",
-            tap::ring::DIR,
-            levels::TAG
+            levels::DIR,
+            TAP_TAG
         ))
     }
 }
@@ -315,7 +317,7 @@ fn run(path: &str) -> Result<(), String> {
     let mut probe = Probe::default();
     let mut screen = layout::Playing::default();
     let mut selector = layout::Selector::default();
-    let mut source = levels::Source::new();
+    let mut source = levels::Source::new(TAP_TAG);
     let mut needles = meters::Meters::default();
     let mut metering = false;
     let mut drawn_at = Instant::now();

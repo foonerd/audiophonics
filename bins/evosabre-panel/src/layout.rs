@@ -8,11 +8,11 @@
 use crate::frame::{self, Frame};
 use crate::grey;
 use crate::icons;
-use crate::meters::{self, Bar};
 use crate::scroll::Marquee;
 use crate::segments;
 use crate::text::{self, Face};
 use audiophonics_base::clock::LocalTime;
+use audiophonics_meters::{self as meters, Bar};
 use audiophonics_player::State;
 use audiophonics_unifont::Unifont;
 use embedded_graphics::mono_font::iso_8859_1::{FONT_5X8, FONT_6X10, FONT_7X13, FONT_9X18_BOLD};

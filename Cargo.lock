@@ -36,6 +36,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "audiophonics-meters"
+version = "0.1.0"
+dependencies = [
+ "tap",
+]
+
+[[package]]
 name = "audiophonics-player"
 version = "0.1.0"
 dependencies = [
@@ -209,6 +216,7 @@ name = "evosabre-panel"
 version = "3.0.0"
 dependencies = [
  "audiophonics-base",
+ "audiophonics-meters",
  "audiophonics-player",
  "audiophonics-remote",
  "audiophonics-unifont",
@@ -218,7 +226,6 @@ dependencies = [
  "serde_json",
  "signal-hook",
  "spidev",
- "tap",
 ]
 
 [[package]]

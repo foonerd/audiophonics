@@ -12,7 +12,9 @@
 //! - the hold, the highest peak of the last moment, standing still for a
 //!   while before it falls: the mark that shows a peak too brief to see.
 
-use crate::levels::Level;
+pub mod levels;
+
+use levels::Level;
 use std::time::{Duration, Instant};
 
 /// The bottom of the scale: sixty decibels under full scale.

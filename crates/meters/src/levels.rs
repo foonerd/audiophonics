@@ -4,15 +4,18 @@
 //! at a time, the peak and RMS of each channel into a ring under /dev/shm,
 //! each hop at the moment its audio is heard. One ring is one stream: it
 //! goes when the stream closes or changes shape, and the next has another.
-//! This finds the live ring of the plugin's own tag, takes the hops that
+//! This finds the live ring of a plugin's own tag, takes the hops that
 //! arrived since the last look as one, and looks again when the ring goes.
+//!
+//! The tag is in the ring's file name: the one the plugin's ALSA
+//! contribution gives its tap. Another plugin's tap in the same chain has
+//! another.
 
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-/// The tag in the ring's file name, which the plugin's ALSA contribution
-/// gives its tap. Another plugin's tap in the same chain has another.
-pub const TAG: &str = "evosabre";
+/// Where the tap keeps its rings.
+pub const DIR: &str = tap::ring::DIR;
 /// How often a ring is looked for while there is none.
 const LOOK_EVERY: Duration = Duration::from_millis(500);
 
@@ -45,14 +48,15 @@ pub struct Source {
 }
 
 impl Source {
-    pub fn new() -> Self {
-        Self::under(Path::new(tap::ring::DIR))
+    /// The rings of the tap tagged `tag`, where the tap keeps them.
+    pub fn new(tag: &str) -> Self {
+        Self::under(Path::new(DIR), tag)
     }
 
-    pub fn under(dir: &Path) -> Self {
+    pub fn under(dir: &Path, tag: &str) -> Self {
         Self {
             dir: dir.to_path_buf(),
-            prefix: format!("{}{TAG}.", tap::ring::PREFIX),
+            prefix: format!("{}{tag}.", tap::ring::PREFIX),
             reader: None,
             last_seq: 0,
             look_at: Instant::now(),
@@ -133,9 +137,11 @@ mod tests {
     use super::*;
     use tap::ring::{Frame, Writer};
 
+    const TAG: &str = "evosabre";
+
     fn dir(tag: &str) -> PathBuf {
         let dir =
-            std::env::temp_dir().join(format!("evosabre-levels-{tag}-{}", std::process::id()));
+            std::env::temp_dir().join(format!("audiophonics-levels-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -163,7 +169,7 @@ mod tests {
     fn the_hops_since_the_last_look_arrive_as_their_highest() {
         let dir = dir("merge");
         let mut w = writer(&dir, TAG, 2);
-        let mut source = Source::under(&dir);
+        let mut source = Source::under(&dir, TAG);
         let t0 = Instant::now();
         assert_eq!(source.take(t0), None, "nothing published yet");
 
@@ -211,7 +217,7 @@ mod tests {
         let dir = dir("tag");
         let mut other = writer(&dir, "glass", 2);
         other.publish(&hop(1, 0.8, 0.8));
-        let mut source = Source::under(&dir);
+        let mut source = Source::under(&dir, TAG);
         assert_eq!(source.take(Instant::now()), None);
         assert_eq!(source.changed(), Some(false));
         std::fs::remove_dir_all(&dir).unwrap();
@@ -220,7 +226,7 @@ mod tests {
     #[test]
     fn a_ring_that_appears_later_is_found_at_the_next_look() {
         let dir = dir("later");
-        let mut source = Source::under(&dir);
+        let mut source = Source::under(&dir, TAG);
         let t0 = Instant::now();
         assert_eq!(source.take(t0), None);
         let mut w = writer(&dir, TAG, 1);
