@@ -109,6 +109,13 @@ const GREETING_HOLD: Duration = Duration::from_millis(1500);
 /// How often the DAC board's input and filter are read while the screen is
 /// up: they can be changed from elsewhere.
 const BOARD_EVERY: Duration = Duration::from_secs(3);
+/// How many polls in a row the player may miss before the mark takes the
+/// track's place: a player that is busy answers late for seconds on end,
+/// and one that has really gone is gone for longer than this.
+const PATIENCE: u32 = 12;
+/// How long an answer is waited for while the player has given none yet:
+/// while it starts it is slow, and there is nothing else to do but wait.
+const FIRST_ANSWER: Duration = Duration::from_secs(2);
 /// How often it is asked whether the system's splash has the screen.
 const SPLASH_EVERY: Duration = Duration::from_millis(500);
 
@@ -399,7 +406,8 @@ fn run(path: &str) -> Result<(), String> {
     let mut keys = Keys::default();
 
     let mut volumio = Volumio::new(cfg.player_base.clone(), cfg.request_timeout);
-    let mut probe = Probe::default();
+    let mut waiting = Volumio::new(cfg.player_base.clone(), FIRST_ANSWER);
+    let mut probe = Probe::tolerating(PATIENCE);
     let covers = {
         let tx = tx.clone();
         Covers::start(cfg.player_base.clone(), move |arrived| {
@@ -444,6 +452,7 @@ fn run(path: &str) -> Result<(), String> {
             }
             idle.retime(Duration::ZERO, new.sleep_after);
             volumio = Volumio::new(new.player_base.clone(), new.request_timeout);
+            waiting = Volumio::new(new.player_base.clone(), FIRST_ANSWER);
             if new.remote {
                 remote.look_now(Instant::now());
                 status.receiver(remote.line());
@@ -540,7 +549,12 @@ fn run(path: &str) -> Result<(), String> {
             status.receiver(remote.line());
         }
         if now >= next_poll {
-            match probe.observe(volumio.state()) {
+            let polled = if probe.state().is_some() {
+                volumio.state()
+            } else {
+                waiting.state()
+            };
+            match probe.observe(polled) {
                 Some(Report::Changed(line)) => info!("{line}"),
                 Some(Report::Outage(line)) => error!("{line}"),
                 None => {}

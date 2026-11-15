@@ -9,8 +9,9 @@ pub enum Report {
     Outage(String),
 }
 
-/// How many polls in a row may fail before the player counts as gone. A
-/// busy player misses one now and then; what it last said stands meanwhile.
+/// How many polls in a row may fail before the player counts as gone,
+/// unless a display asks for more patience. A busy player misses one now
+/// and then; what it last said stands meanwhile.
 pub const TOLERATED_MISSES: u32 = 2;
 
 /// Turns a stream of poll results into a stream of journal lines.
@@ -19,7 +20,7 @@ pub const TOLERATED_MISSES: u32 = 2;
 /// not fill the journal. An outage is reported once, when it begins, and the
 /// first state after it is always reported, because whatever the player says
 /// on return is news even when it matches what was said before.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Probe {
     last: Option<State>,
     /// What was last said about the state; the seek position moves every
@@ -27,10 +28,31 @@ pub struct Probe {
     said: Option<String>,
     /// Polls that have failed since the last that did not.
     misses: u32,
+    /// How many of them in a row are let pass.
+    tolerated: u32,
     down: bool,
 }
 
+impl Default for Probe {
+    fn default() -> Self {
+        Self::tolerating(TOLERATED_MISSES)
+    }
+}
+
 impl Probe {
+    /// A probe that lets this many polls in a row fail before the player
+    /// counts as gone: for a display whose picture of a player that is
+    /// only slow is worth more than a prompt word that it has gone.
+    pub fn tolerating(misses: u32) -> Self {
+        Self {
+            last: None,
+            said: None,
+            misses: 0,
+            tolerated: misses,
+            down: false,
+        }
+    }
+
     /// The last state the player gave, if it is answering.
     pub fn state(&self) -> Option<&State> {
         self.last.as_ref()
@@ -51,7 +73,7 @@ impl Probe {
                 Some(Report::Changed(line))
             }
             Err(e) => {
-                if self.last.is_some() && self.misses < TOLERATED_MISSES {
+                if self.last.is_some() && self.misses < self.tolerated {
                     self.misses += 1;
                     return None;
                 }
@@ -149,6 +171,31 @@ mod tests {
         assert!(p.state().is_none());
         assert_eq!(p.observe(Err(Error::Decode("cut short".into()))), None);
         assert_eq!(p.observe(Err(Error::Decode("x".into()))), None);
+    }
+
+    #[test]
+    fn a_patient_probe_lets_more_polls_fail_before_the_player_is_gone() {
+        let mut p = Probe::tolerating(10);
+        p.observe(Ok(playing(67)));
+        for _ in 0..10 {
+            assert_eq!(p.observe(Err(Error::Decode("slow".into()))), None);
+            assert!(p.state().is_some());
+        }
+        assert!(matches!(
+            p.observe(Err(Error::Decode("slow".into()))),
+            Some(Report::Outage(_))
+        ));
+        assert!(p.state().is_none());
+        // One answer in between starts the count again.
+        let mut p = Probe::tolerating(3);
+        p.observe(Ok(playing(67)));
+        for _ in 0..5 {
+            for _ in 0..3 {
+                assert_eq!(p.observe(Err(Error::Decode("slow".into()))), None);
+            }
+            p.observe(Ok(playing(67)));
+            assert!(p.state().is_some());
+        }
     }
 
     #[test]
