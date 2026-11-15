@@ -31,18 +31,21 @@ echo "check: shell scripts"
 for script in scripts/*.sh; do
   bash -n "$script" || { echo "check: $script does not parse" >&2; exit 1; }
 done
-# Volumio runs a plugin's install.sh and uninstall.sh with sh, which is dash.
-for script in plugins/*/install.sh plugins/*/uninstall.sh plugins/*/test/*.sh; do
+# Volumio runs a plugin's install.sh and uninstall.sh with sh, which is dash,
+# and so does whatever they run: a plugin's helpers are in its boot/ folder.
+helpers=$(find plugins -mindepth 3 -maxdepth 3 -path 'plugins/*/boot/*' -type f | sort)
+for script in plugins/*/install.sh plugins/*/uninstall.sh plugins/*/test/*.sh $helpers; do
   sh -n "$script" || { echo "check: $script does not parse" >&2; exit 1; }
 done
 if command -v shellcheck >/dev/null 2>&1; then
   # SC1007 is the `CDPATH= cd` idiom; SC1090 a plugin's build.conf, named at run time.
   shellcheck -e SC1007,SC1090 scripts/*.sh
-  shellcheck -s dash plugins/*/install.sh plugins/*/uninstall.sh plugins/*/test/*.sh
+  # shellcheck disable=SC2086
+  shellcheck -s dash plugins/*/install.sh plugins/*/uninstall.sh plugins/*/test/*.sh $helpers
 fi
 # A script committed without its executable bit fails on someone else's machine.
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  for script in scripts/*.sh plugins/*/install.sh plugins/*/uninstall.sh; do
+  for script in scripts/*.sh plugins/*/install.sh plugins/*/uninstall.sh $helpers; do
     mode=$(git ls-files -s "$script" | cut -d' ' -f1)
     if [ -n "$mode" ] && [ "$mode" != 100755 ]; then
       echo "check: $script is not executable in git (mode $mode)" >&2

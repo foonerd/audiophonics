@@ -21,12 +21,33 @@ const PLUGIN_DIR: &str = "/data/plugins/system_hardware/raspdac_mini_lcd";
 /// The longest the screen can be asked to stay up while nothing plays.
 const HOUR: i64 = 3600;
 
+/// How the panel is driven: see `panel`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Driver {
+    /// Through the kernel's driver, as a framebuffer.
+    Framebuffer,
+    /// By this program, over SPI.
+    Spi,
+}
+
+impl Driver {
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.trim() {
+            "framebuffer" => Some(Self::Framebuffer),
+            "spi" => Some(Self::Spi),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Config {
     pub player_base: String,
     pub poll_interval: Duration,
     pub request_timeout: Duration,
 
+    pub driver: Driver,
+    /// How the panel is wired, for when this program drives it.
     pub wiring: Wiring,
     /// Where the faces and the mark are.
     pub assets: String,
@@ -56,6 +77,7 @@ impl Default for Config {
             poll_interval: Duration::from_millis(500),
             request_timeout: Duration::from_millis(400),
 
+            driver: Driver::Framebuffer,
             wiring: Wiring {
                 spi_device: "/dev/spidev0.0".into(),
                 spi_speed_hz: 64_000_000,
@@ -80,9 +102,9 @@ impl Default for Config {
 
 impl Config {
     /// True when what differs from `other` is only read at start: how the
-    /// panel is wired, and where its faces are.
+    /// panel is driven and wired, and where its faces are.
     pub fn rewired(&self, other: &Config) -> bool {
-        self.wiring != other.wiring || self.assets != other.assets
+        self.driver != other.driver || self.wiring != other.wiring || self.assets != other.assets
     }
 }
 
@@ -136,6 +158,12 @@ pub fn from_store(store: &Store) -> (Config, Vec<String>) {
             Err(e) => problems.push(e),
         }
     }
+    if let Some(v) = store.text("display_driver") {
+        match Driver::parse(&v) {
+            Some(driver) => c.driver = driver,
+            None => problems.push(format!("display_driver: not framebuffer or spi: {v}")),
+        }
+    }
     if let Some(v) = store.text("log_level") {
         match Level::parse(&v) {
             Some(level) => c.log_level = level,
@@ -169,6 +197,7 @@ mod tests {
     #[test]
     fn the_defaults_are_the_raspdac_mini_as_wired() {
         let c = Config::default();
+        assert_eq!(c.driver, Driver::Framebuffer);
         assert_eq!(c.wiring.spi_device, "/dev/spidev0.0");
         assert_eq!(c.wiring.spi_speed_hz, 64_000_000);
         assert_eq!((c.wiring.dc_gpio, c.wiring.reset_gpio), (27, 24));
@@ -190,12 +219,14 @@ mod tests {
                 "boot_splash": { "type": "boolean", "value": false },
                 "sleep_after": { "type": "number", "value": 0 },
                 "remote_active": { "type": "boolean", "value": false },
+                "display_driver": { "type": "string", "value": "spi" },
                 "log_level": { "type": "string", "value": "info" }
             }"#,
         )
         .unwrap();
         let (c, problems) = from_store(&store);
         assert_eq!(problems, Vec::<String>::new());
+        assert_eq!(c.driver, Driver::Spi);
         assert!(!c.splash);
         assert_eq!(c.sleep_after, Duration::ZERO, "nought is never");
         assert!(!c.remote);
@@ -217,6 +248,7 @@ mod tests {
         assert_eq!(problems, Vec::<String>::new());
         assert_eq!(c.sleep_after, Duration::from_secs(1800));
         assert!(c.splash && c.remote);
+        assert_eq!(c.driver, Driver::Framebuffer, "as version 1 drove it");
     }
 
     #[test]
@@ -226,14 +258,21 @@ mod tests {
                 "sleep_after": { "type": "number", "value": 7200 },
                 "boot_splash": { "type": "string", "value": "perhaps" },
                 "log_level": { "type": "string", "value": "loud" },
+                "display_driver": { "type": "string", "value": "hdmi" },
                 "spi_speed_hz": { "type": "number", "value": 5 }
             }"#,
         )
         .unwrap();
         let (c, problems) = from_store(&store);
         assert_eq!(c, Config::default());
-        assert_eq!(problems.len(), 4, "{problems:?}");
-        for key in ["sleep_after", "boot_splash", "log_level", "spi_speed_hz"] {
+        assert_eq!(problems.len(), 5, "{problems:?}");
+        for key in [
+            "sleep_after",
+            "boot_splash",
+            "log_level",
+            "display_driver",
+            "spi_speed_hz",
+        ] {
             assert!(
                 problems.iter().any(|p| p.contains(key)),
                 "{key}: {problems:?}"
@@ -267,5 +306,8 @@ mod tests {
         let mut moved = base.clone();
         moved.assets = "/tmp/assets".into();
         assert!(base.rewired(&moved));
+        let mut driven = base.clone();
+        driven.driver = Driver::Spi;
+        assert!(base.rewired(&driven));
     }
 }

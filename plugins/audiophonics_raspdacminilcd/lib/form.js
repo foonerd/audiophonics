@@ -8,13 +8,19 @@ const NUMBERS = {
     sleep_after: [0, 3600]
 };
 const SWITCHES = ['lcd_active', 'boot_splash', 'remote_active'];
-const SELECTS = { log_level: ['error', 'info', 'debug'] };
+const SELECTS = { display_driver: ['framebuffer', 'spi'], log_level: ['error', 'info', 'debug'] };
 
 // A switch as the store may hold it: a boolean, or its text.
 function isOn(value, fallback) {
     if (value === true || value === 'true') return true;
     if (value === false || value === 'false') return false;
     return fallback;
+}
+
+// The way the display is driven, as the store may hold it: one of the two
+// words the boot configuration's helper takes, whatever was stored.
+function driver(value) {
+    return value === 'spi' ? 'spi' : 'framebuffer';
 }
 
 // The stored values into the page's controls. `get(key)` answers undefined
@@ -63,4 +69,4 @@ function take(data, keys) {
     return { values: values };
 }
 
-module.exports = { NUMBERS, isOn, fill, take };
+module.exports = { NUMBERS, isOn, driver, fill, take };

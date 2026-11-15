@@ -10,8 +10,12 @@
         "SECTION_DISPLAY_DOC": "The display on the front. It shows the cover of what plays with the track along the bottom and the player's state, the unit's address, the time and the volume along the top. The Down key of the remote turns to a second page with the stream's format, and back.",
         "LCD_ACTIVE": "Display on",
         "LCD_ACTIVE_DOC": "Off stops the display's program altogether: the screen stays black and the remote is not read.",
+        "DISPLAY_DRIVER": "Display driver",
+        "DISPLAY_DRIVER_DOC": "How the display is driven. System framebuffer: the system has the display from the first moments of a start, so the player's own start-up and shutdown screens and the progress of a system update show on it, and the plugin draws once they are done. Direct: the plugin drives the display itself and sends it only what changed; nothing shows before the plugin's program runs, and nothing shows during a system update. A change takes effect when the player has restarted.",
+        "DRIVER_FRAMEBUFFER": "System framebuffer",
+        "DRIVER_SPI": "Direct",
         "BOOT_SPLASH": "Mark at start and at shutdown",
-        "BOOT_SPLASH_DOC": "The Audiophonics mark with a word under it while the player starts, shuts down or restarts. Off leaves the screen black at those times.",
+        "BOOT_SPLASH_DOC": "The Audiophonics mark with a word under it while the player's software starts, and when it shuts down or restarts. Off leaves the screen black at those times. With the system framebuffer the player's own screens come first at a start and last at a shutdown.",
         "SLEEP_AFTER": "Black after (seconds)",
         "SLEEP_AFTER_DOC": "How long after the last button on the remote, while nothing plays, the screen goes black. A button, playback starting or a change of volume brings it back. 0 never goes black. The display has no way to switch its light off, so a black screen still glows a little.",
         "SECTION_REMOTE": "Remote control",
@@ -34,6 +38,8 @@
         "LOG_INFO": "Changes",
         "LOG_DEBUG": "Everything",
         "RESTART_TITLE": "A restart is needed",
-        "RESTART_MSG": "The display and the remote receiver are switched on in the boot configuration, which the player reads when it starts. Restart the player to bring them up."
+        "RESTART_MSG": "The display and the remote receiver are switched on in the boot configuration, which the player reads when it starts. Restart the player to bring them up.",
+        "DRIVER_RESTART_MSG": "The display driver is set in the boot configuration, which the player reads when it starts. Restart the player to change the way the display is driven; until then it goes on as it is.",
+        "BOOT_FAILED": "The boot configuration could not be written: {{error}}"
     }
 }

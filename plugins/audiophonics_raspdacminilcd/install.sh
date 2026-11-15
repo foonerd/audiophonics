@@ -13,12 +13,13 @@ UNIT="/etc/systemd/system/$SERVICE.service"
 RULES="/etc/udev/rules.d/70-raspdacmini-remote.rules"
 SUDOERS="/etc/sudoers.d/volumio-user-raspdac_mini_lcd"
 USERCONFIG="/boot/userconfig.txt"
-MARK_BEGIN="# >>> raspdac_mini_lcd"
-MARK_END="# <<< raspdac_mini_lcd"
 PLUGINS="/data/configuration/plugins.json"
 SETTINGS="/data/configuration/system_hardware/raspdac_mini_lcd/config.json"
-# The display's SPI device. The installer's own tests stand a file in for it.
+BOOT_HELPER="/usr/local/bin/raspdacmini-boot"
+# The display's SPI device, and where the kernel lists its framebuffers. The
+# installer's own tests stand a file and a folder in for them.
 SPI_DEVICE="${RASPDACMINI_SPI_DEVICE:-/dev/spidev0.0}"
+GRAPHICS="${RASPDACMINI_GRAPHICS:-/sys/class/graphics}"
 
 # A refused install leaves nothing behind, so the next attempt starts clean.
 refuse() {
@@ -107,57 +108,36 @@ fi
 rm -rf "$PLUGIN_DIR/compositor" "$PLUGIN_DIR/native" "$PLUGIN_DIR/scripts" "$PLUGIN_DIR/lirc"
 
 # =============================================================================
-# SETUP: the boot configuration. Version 1 had the kernel drive the display
-# through an overlay of its own, which holds the SPI device this version
-# opens; its lines go, and so does the overlay's file. The display is on the
-# SPI bus and the receiver is the gpio-ir overlay on GPIO 4. Each line goes
-# into this plugin's own block of userconfig.txt, unless the boot
-# configuration already carries it: a line written twice loads the overlay
-# twice.
+# SETUP: the boot configuration, for the way the display is driven. As a
+# framebuffer, which is how it is driven unless the settings say otherwise,
+# the kernel has the panel from the start of the boot, through its own
+# overlay for such panels; over SPI, the plugin's program has it. The
+# receiver is the gpio-ir overlay on GPIO 4 either way. A helper keeps the
+# plugin's block of userconfig.txt to that, and takes out what version 1
+# wrote there; the plugin runs the same helper when the setting changes.
+# Version 1's own overlay file is not needed by either way and goes.
 # =============================================================================
+DRIVER=framebuffer
+if [ -f "$SETTINGS" ] && flat "$SETTINGS" | grep -q '"display_driver":{[^}]*"value":"spi"'; then
+  DRIVER=spi
+fi
+install -m 755 "$PLUGIN_DIR/boot/raspdacmini-boot" "$BOOT_HELPER"
 REBOOT=0
 if [ -f /boot/config.txt ]; then
-  outside=$(mktemp)
-  block=$(mktemp)
-  touch "$USERCONFIG"
-  # Everything but this plugin's block and version 1's lines: its overlay
-  # with the comment above it, and the receiver's line where it stands
-  # under version 1's comment.
-  sed "/^$MARK_BEGIN\$/,/^$MARK_END\$/d" "$USERCONFIG" \
-    | sed '/^# RaspDacMini LCD Display$/d; /^dtoverlay=raspdac-mini-lcd$/d' \
-    | sed '/^# IR Remote Control (GPIO 4)$/{$!N;/\ndtoverlay=gpio-ir,gpio_pin=4$/d;s/^# IR Remote Control (GPIO 4)\n//;/^# IR Remote Control (GPIO 4)$/d;}' > "$outside"
-  : > "$block"
-  if ! cat /boot/config.txt /boot/volumioconfig.txt "$outside" 2>/dev/null | grep -qx "dtparam=spi=on"; then
-    echo "dtparam=spi=on" >> "$block"
-  fi
-  if ! cat /boot/config.txt /boot/volumioconfig.txt "$outside" 2>/dev/null | grep -qE "^dtoverlay=gpio-ir(,|\$)"; then
-    echo "dtoverlay=gpio-ir,gpio_pin=4" >> "$block"
-  fi
-  if [ -s "$block" ]; then
-    # A file whose last line has no end would have the mark joined to it.
-    if [ -s "$outside" ] && [ -n "$(tail -c 1 "$outside")" ]; then
-      echo >> "$outside"
-    fi
-    {
-      echo "$MARK_BEGIN"
-      cat "$block"
-      echo "$MARK_END"
-    } >> "$outside"
-  fi
-  if ! cmp -s "$outside" "$USERCONFIG"; then
-    cat "$outside" > "$USERCONFIG"
+  if [ "$("$BOOT_HELPER" "$DRIVER")" = changed ]; then
     REBOOT=1
     echo "Boot configuration updated: $USERCONFIG"
   fi
-  rm -f "$outside" "$block"
   rm -f /boot/overlays/raspdac-mini-lcd.dtbo
 else
-  echo "WARNING: no /boot/config.txt here; the SPI bus and the gpio-ir overlay are not set up"
+  echo "WARNING: no /boot/config.txt here; the display and the gpio-ir overlay are not set up"
 fi
 # Version 1 also loaded its overlay while the player ran, where it had not
-# been loaded at boot. One loaded that way can be taken out again, and the
-# display then needs no restart.
-if command -v dtoverlay >/dev/null 2>&1 && dtoverlay -l 2>/dev/null | grep -q "raspdac-mini-lcd"; then
+# been loaded at boot. As a framebuffer the panel it gives is the one this
+# version draws on, so it stays until the player restarts on the new boot
+# configuration. Over SPI it is in the way, and one loaded that way can be
+# taken out again.
+if [ "$DRIVER" = spi ] && command -v dtoverlay >/dev/null 2>&1 && dtoverlay -l 2>/dev/null | grep -q "raspdac-mini-lcd"; then
   if dtoverlay -r raspdac-mini-lcd 2>/dev/null; then
     echo "Unloaded version 1's display overlay"
   fi
@@ -175,11 +155,11 @@ udevadm trigger --action=change --subsystem-match=rc --subsystem-match=lirc 2>/d
 
 # =============================================================================
 # SETUP: the groups the service takes for the SPI bus, the GPIO lines, the
-# receiver's input device and the DAC's mixer. Volumio's Raspberry Pi image
-# has all four; one that is missing is made, so the service starts and says
-# what it cannot open.
+# receiver's input device, the DAC's mixer and the framebuffer. Volumio's
+# Raspberry Pi image has all five; one that is missing is made, so the
+# service starts and says what it cannot open.
 # =============================================================================
-for group in spi gpio input audio; do
+for group in spi gpio input audio video; do
   if ! getent group "$group" >/dev/null 2>&1; then
     groupadd -f "$group"
     echo "WARNING: the group $group was missing and has been made; its devices may not be open to it"
@@ -193,6 +173,8 @@ done
 cat > "$SUDOERS" << 'SUDO'
 # raspdac_mini_lcd plugin: the display's service, switched with the plugin's Display setting
 volumio ALL=(ALL) NOPASSWD: /bin/systemctl enable --now raspdacmini-panel.service, /bin/systemctl disable --now raspdacmini-panel.service
+# and the plugin's lines in the boot configuration, which follow its Display driver setting
+volumio ALL=(ALL) NOPASSWD: /usr/local/bin/raspdacmini-boot framebuffer, /usr/local/bin/raspdacmini-boot spi
 SUDO
 chmod 0440 "$SUDOERS"
 if ! visudo -c -f "$SUDOERS" >/dev/null 2>&1; then
@@ -214,14 +196,27 @@ chown -R volumio:volumio "$PLUGIN_DIR"
 # An update of a plugin in use: Volumio goes on running the previous
 # version's code until the player restarts and starts nothing of the new
 # one, so the display is started here rather than left dark until then.
-# Where version 1's overlay was loaded at boot it holds the display until
-# the player restarts, and nothing started here could open it. systemd
+# That needs the panel to be there the way this version is set to drive it:
+# as a framebuffer, which version 1's overlay gives as well, or as the SPI
+# device, which that overlay holds until the player restarts. systemd
 # counts the service started as soon as its program is run; a display that
 # cannot be opened ends it a moment later, so it is looked at again before
 # anything is said of it.
+panel_there() {
+  if [ "$DRIVER" = spi ]; then
+    [ -e "$SPI_DEVICE" ]
+    return
+  fi
+  for name in "$GRAPHICS"/fb*/name; do
+    if [ -r "$name" ] && [ "$(cat "$name")" = fb_ili9341 ]; then
+      return 0
+    fi
+  done
+  return 1
+}
 WAITING=0
 if [ "$IN_USE" = 1 ] && [ "$DISPLAY_ON" = 1 ]; then
-  if [ -e "$SPI_DEVICE" ]; then
+  if panel_there; then
     systemctl enable --now "$SERVICE.service" 2>/dev/null || true
     sleep 2
     if systemctl is-active --quiet "$SERVICE.service" 2>/dev/null; then
@@ -238,9 +233,9 @@ fi
 echo "RaspDacMini LCD installed"
 if [ "$WAITING" = 1 ]; then
   echo "Restart the player: the display comes up on the new boot configuration, and stays dark until then"
-elif [ "$REBOOT" = 1 ]; then
-  echo "Restart the player once: the display and the remote come up on the new boot configuration"
 elif [ "$IN_USE" = 1 ]; then
   echo "Restart the player to finish the update: until then the plugin's settings page is the previous version's"
+elif [ "$REBOOT" = 1 ]; then
+  echo "Restart the player once: the display and the remote come up on the new boot configuration"
 fi
 echo "plugininstallend"

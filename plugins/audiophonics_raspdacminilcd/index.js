@@ -18,7 +18,10 @@ var SERVICE = 'raspdacmini-panel.service';
 var REMOTE_STATUS = '/run/raspdacmini-panel/remote.json';
 var USERCONFIG = '/boot/userconfig.txt';
 var SPI_DEVICE = '/dev/spidev0.0';
+var GRAPHICS = '/sys/class/graphics';
+var PANEL_FB = 'fb_ili9341';
 var RC_DEVICES = '/sys/class/rc';
+var BOOT_HELPER = '/usr/local/bin/raspdacmini-boot';
 var BOOT_MARK = '# >>> raspdac_mini_lcd';
 // The name the display's program calls this plugin by at the player.
 var ENDPOINT = { endpoint: 'raspdac_mini_lcd', type: 'system_hardware', name: 'raspdac_mini_lcd', method: 'panelAsks' };
@@ -166,6 +169,58 @@ RaspDacMini.prototype.reloadDisplay = function () {
     }, 1500);
 };
 
+// Whether the panel is there the way the settings have it driven: as the
+// kernel's framebuffer for it, or as the SPI device.
+RaspDacMini.prototype.panelPresent = function () {
+    if (form.driver(this.config.get('display_driver')) === 'spi') {
+        return fs.existsSync(SPI_DEVICE);
+    }
+    var names;
+    try { names = fs.readdirSync(GRAPHICS); } catch (e) { return false; }
+    return names.some(function (name) {
+        try {
+            return fs.readFileSync(path.join(GRAPHICS, name, 'name'), 'utf8').trim() === PANEL_FB;
+        } catch (e) {
+            return false;
+        }
+    });
+};
+
+// The plugin's lines in the boot configuration, as the Display driver
+// setting has them. Resolves with whether the file changed, which is when
+// the player has to restart; resolves false, with a word on the page, when
+// it could not be written.
+RaspDacMini.prototype.applyBoot = function () {
+    var self = this;
+    var defer = libQ.defer();
+    var driver = form.driver(self.config.get('display_driver'));
+    exec('/usr/bin/sudo ' + BOOT_HELPER + ' ' + driver, { uid: 1000, gid: 1000 }, function (error, stdout, stderr) {
+        if (error) {
+            var why = String(stderr || error.message || error).trim();
+            self.logger.error(id + 'boot configuration: ' + why);
+            self.commandRouter.pushToastMessage('error', self.commandRouter.getI18nString('RASPDACMINI.PLUGIN_NAME'),
+                self.commandRouter.getI18nString('RASPDACMINI.BOOT_FAILED').replace('{{error}}', why));
+            defer.resolve(false);
+        } else {
+            defer.resolve(String(stdout).trim() === 'changed');
+        }
+    });
+    return defer.promise;
+};
+
+RaspDacMini.prototype.askRestart = function (message) {
+    var self = this;
+    self.commandRouter.broadcastMessage('openModal', {
+        title: self.commandRouter.getI18nString('RASPDACMINI.RESTART_TITLE'),
+        message: self.commandRouter.getI18nString(message),
+        size: 'lg',
+        buttons: [
+            { name: self.commandRouter.getI18nString('COMMON.RESTART'), class: 'btn btn-info', emit: 'reboot', payload: '' },
+            { name: self.commandRouter.getI18nString('COMMON.CONTINUE'), class: 'btn btn-default', emit: 'closeModals', payload: '' }
+        ]
+    });
+};
+
 // The display and the receiver are switched on in the boot configuration,
 // which the installer wrote; until the player has restarted on it, one or
 // both are not there. Asked once per start, and only when that is the case.
@@ -173,7 +228,7 @@ RaspDacMini.prototype.askRestartIfNeeded = function () {
     var self = this;
     var written = false;
     try { written = fs.readFileSync(USERCONFIG, 'utf8').indexOf(BOOT_MARK) !== -1; } catch (e) { /* no boot configuration here */ }
-    if (!written || (fs.existsSync(SPI_DEVICE) && remote.receiverPresent(RC_DEVICES))) {
+    if (!written || (self.panelPresent() && remote.receiverPresent(RC_DEVICES))) {
         return;
     }
     self.commandRouter.broadcastMessage('openModal', {
@@ -238,8 +293,18 @@ RaspDacMini.prototype.save = function (data, keys) {
 RaspDacMini.prototype.saveDisplay = function (data) {
     var self = this;
     var was = form.isOn(self.config.get('lcd_active'), true);
-    if (!self.save(data, ['lcd_active', 'boot_splash', 'sleep_after'])) {
+    var driven = form.driver(self.config.get('display_driver'));
+    if (!self.save(data, ['lcd_active', 'display_driver', 'boot_splash', 'sleep_after'])) {
         return libQ.resolve();
+    }
+    if (form.driver(self.config.get('display_driver')) !== driven) {
+        // The way the display is driven is in the boot configuration: the
+        // display goes on as it is until the player has restarted on it.
+        self.applyBoot().then(function (changed) {
+            if (changed) {
+                self.askRestart('RASPDACMINI.DRIVER_RESTART_MSG');
+            }
+        });
     }
     if (form.isOn(self.config.get('lcd_active'), true) !== was) {
         // A display just switched on starts before the store has written

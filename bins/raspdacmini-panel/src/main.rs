@@ -8,6 +8,11 @@
 //! every button and every outage goes to the journal once, so the unit can
 //! be checked from a terminal as well as from the glass.
 //!
+//! The panel is driven one of two ways, as the settings say: see `panel`.
+//! Where it is a framebuffer, the system's boot splash draws on it too,
+//! at the start of a boot, while the system goes down and through a system
+//! update; for as long as the splash runs, this program draws nothing.
+//!
 //! While nothing plays and nothing is touched the screen goes black after
 //! `sleep_after`, and comes back with a button, with playback, or with a
 //! change of volume made elsewhere. On SIGTERM the screen is made black
@@ -27,11 +32,14 @@ mod canvas;
 mod config;
 mod cover;
 mod dac;
+mod fbdev;
 mod icons;
 mod ili9341;
 mod keys;
 mod mark;
 mod pages;
+mod panel;
+mod plymouth;
 mod render;
 mod screens;
 mod text;
@@ -45,14 +53,14 @@ use audiophonics_player::probe::{Probe, Report};
 use audiophonics_player::{Player, Volumio};
 use audiophonics_remote::watch::{self, Watch};
 use audiophonics_remote::{Event, Press, Status};
-use canvas::{Canvas, Frame, Rgb};
+use canvas::{Area, Canvas, Frame, Rgb};
 use config::Config;
 use cover::{Arrived, Covers, Shelf};
 use dac::{Amixer, Dac};
-use ili9341::{Ili9341, Spi};
 use keys::{Action, Keys};
 use mark::Mark;
 use pages::{Page, Pages};
+use panel::Panel;
 use screens::{Screens, Shown};
 use std::path::Path;
 use std::process::ExitCode;
@@ -101,6 +109,8 @@ const GREETING_HOLD: Duration = Duration::from_millis(1500);
 /// How often the DAC board's input and filter are read while the screen is
 /// up: they can be changed from elsewhere.
 const BOARD_EVERY: Duration = Duration::from_secs(3);
+/// How often it is asked whether the system's splash has the screen.
+const SPLASH_EVERY: Duration = Duration::from_millis(500);
 
 /// What the loop wakes for besides time.
 enum Msg {
@@ -298,12 +308,17 @@ impl Board {
     }
 }
 
-/// Send the glass the part of a canvas that is not on it yet.
-fn present(panel: &mut Ili9341<Spi>, shown: &mut Frame, canvas: &Canvas) -> Result<(), String> {
+/// Send the glass the part of a canvas that is not on it yet; all of it
+/// where what is on the glass is not known.
+fn present(panel: &mut Panel, shown: &mut Option<Frame>, canvas: &Canvas) -> Result<(), String> {
     let frame = Frame::from(canvas);
-    if let Some(area) = frame.changed(shown) {
+    let area = match shown {
+        Some(was) => frame.changed(was),
+        None => Some(Area::ALL),
+    };
+    if let Some(area) = area {
         panel.show(&frame, area)?;
-        *shown = frame;
+        *shown = Some(frame);
     }
     Ok(())
 }
@@ -344,11 +359,21 @@ fn run(path: &str) -> Result<(), String> {
     let mut going: Option<Leaving> = None;
 
     let display = |e: String| format!("display: {e}");
-    let wire = Spi::open(&cfg.wiring).map_err(display)?;
-    info!("display: {}", wire.describe());
-    let mut panel = Ili9341::start(wire).map_err(display)?;
-    // The glass is black now, and so is what is known of it.
-    let mut shown = Frame::black();
+    let (mut panel, found) = Panel::open(&cfg).map_err(display)?;
+    info!("display: {found}");
+    // A panel this program has to itself was cleared as it was opened. One
+    // it shares shows whatever was drawn on it last, and for as long as
+    // the system's splash runs it is the splash's.
+    let mut shown = if panel.shared() {
+        None
+    } else {
+        Some(Frame::black())
+    };
+    let mut yielded = panel.shared() && plymouth::running();
+    let mut splash_asked = Instant::now();
+    if yielded {
+        info!("display: the system's splash has the screen");
+    }
 
     let assets = Path::new(&cfg.assets).to_path_buf();
     let mut faces = Faces::open(&assets);
@@ -360,7 +385,9 @@ fn run(path: &str) -> Result<(), String> {
         }
     };
     let greeting = splash(&cfg, mark.as_ref(), &cfg.starting_text, &mut faces);
-    present(&mut panel, &mut shown, &greeting).map_err(display)?;
+    if !yielded {
+        present(&mut panel, &mut shown, &greeting).map_err(display)?;
+    }
     let started = Instant::now();
 
     let (tx, rx) = mpsc::channel::<Msg>();
@@ -428,6 +455,24 @@ fn run(path: &str) -> Result<(), String> {
             info!("settings read again");
         }
 
+        // A panel that is a framebuffer is the system's splash's while that
+        // runs: nothing is drawn, and what it leaves on the glass is not
+        // what was drawn here last.
+        if panel.shared() && splash_asked.elapsed() >= SPLASH_EVERY {
+            splash_asked = Instant::now();
+            let has_it = plymouth::running();
+            if has_it != yielded {
+                yielded = has_it;
+                shown = None;
+                asleep = false;
+                if yielded {
+                    info!("display: the system's splash has the screen");
+                } else {
+                    info!("display: the screen is this program's again");
+                }
+            }
+        }
+
         // The player is going down: say so, in place of whatever was up.
         let announced = if going_off.swap(false, Ordering::Relaxed) {
             Some(Leaving::Off)
@@ -448,25 +493,32 @@ fn run(path: &str) -> Result<(), String> {
                         &cfg.restart_text
                     }
                 };
-                let canvas = splash(&cfg, mark.as_ref(), word, &mut faces);
-                present(&mut panel, &mut shown, &canvas).map_err(display)?;
+                if !yielded {
+                    let canvas = splash(&cfg, mark.as_ref(), word, &mut faces);
+                    present(&mut panel, &mut shown, &canvas).map_err(display)?;
+                }
                 going = Some(way);
             }
         }
         if stop.load(Ordering::Relaxed) {
             let black = Canvas::new();
-            match leaving::at_stop(going) {
-                leaving::AtStop::Blank => {
-                    present(&mut panel, &mut shown, &black).map_err(display)?;
-                    info!("stopping: screen made black");
+            let way = leaving::at_stop(going);
+            if way == leaving::AtStop::HoldThenBlank {
+                std::thread::sleep(leaving::HOLD);
+            }
+            // The system's splash, where it has come up to see the system
+            // down, keeps the screen.
+            let splash_has_it = panel.shared() && plymouth::running();
+            match way {
+                _ if splash_has_it => {
+                    info!("stopping: the screen left to the system's splash");
                 }
                 leaving::AtStop::Keep => {
                     info!("stopping: the word left on the glass for the mark to replace");
                 }
-                leaving::AtStop::HoldThenBlank => {
-                    std::thread::sleep(leaving::HOLD);
+                leaving::AtStop::Blank | leaving::AtStop::HoldThenBlank => {
                     present(&mut panel, &mut shown, &black).map_err(display)?;
-                    info!("stopping: goodbye said, screen made black");
+                    info!("stopping: screen made black");
                 }
             }
             return Ok(());
@@ -520,7 +572,9 @@ fn run(path: &str) -> Result<(), String> {
             }
         }
 
-        if idle.level(now) == Level::Blank {
+        if yielded {
+            // Not this program's to draw on for now.
+        } else if idle.level(now) == Level::Blank {
             if !asleep {
                 present(&mut panel, &mut shown, &Canvas::new()).map_err(display)?;
                 info!("screen black");
@@ -611,7 +665,7 @@ fn run(path: &str) -> Result<(), String> {
         if let Some(at) = keys.deadline() {
             wake = wake.min(at);
         }
-        if !asleep {
+        if !asleep && !yielded {
             let player_up = probe.state().is_some();
             if player_up && (pages.sliding(now) || screens.moving()) {
                 wake = wake.min(now + FRAME);

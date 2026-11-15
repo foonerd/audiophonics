@@ -16,7 +16,7 @@ test('a switch reads from a boolean or its text, and falls back otherwise', () =
 });
 
 test('a saved section is checked before anything is stored', () => {
-    const keys = ['lcd_active', 'boot_splash', 'sleep_after'];
+    const keys = ['lcd_active', 'display_driver', 'boot_splash', 'sleep_after'];
     const good = form.take({ lcd_active: true, boot_splash: 'false', sleep_after: '900' }, keys);
     assert.deepEqual(good, { values: { lcd_active: true, boot_splash: false, sleep_after: 900 } });
     assert.deepEqual(form.take({ sleep_after: 0 }, keys), { values: { sleep_after: 0 } }, 'nought is never, and is taken');
@@ -32,6 +32,19 @@ test('a select arrives as an object or as its value, and only a known choice is 
     assert.deepEqual(form.take({ log_level: 'debug' }, ['log_level']), { values: { log_level: 'debug' } });
     assert.deepEqual(form.take({ log_level: 'loud' }, ['log_level']), { values: {} });
     assert.deepEqual(form.take({ remote_active: 'false' }, ['remote_active']), { values: { remote_active: false } });
+    assert.deepEqual(form.take({ display_driver: { value: 'spi', label: 'Direct' } }, ['display_driver']), { values: { display_driver: 'spi' } });
+    assert.deepEqual(form.take({ display_driver: 'hdmi' }, ['display_driver']), { values: {} });
+});
+
+// What the store holds for the driver goes to a helper that runs as root:
+// it is one of two words, whatever was stored.
+test('the way the display is driven is one of two words, and the framebuffer unless it says otherwise', () => {
+    assert.equal(form.driver('spi'), 'spi');
+    assert.equal(form.driver('framebuffer'), 'framebuffer');
+    for (const odd of [undefined, null, '', 'SPI', 'spi; reboot', { value: 'spi' }, true]) {
+        assert.equal(form.driver(odd), 'framebuffer', String(odd));
+    }
+    assert.equal(defaults.display_driver.value, 'framebuffer');
 });
 
 test('stored values fill the page and a key the store lacks leaves the page its default', () => {

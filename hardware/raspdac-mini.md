@@ -18,10 +18,17 @@ The display, its two lines and the receiver are wired as on the [EVO Sabre](evo-
 
 ## Boot configuration
 
+With the kernel driving the display, as a framebuffer:
+
+    dtoverlay=fbtft,spi0-0,ili9341,bgr,reset_pin=24,dc_pin=27,rotate=90,speed=64000000,fps=30
+    dtoverlay=gpio-ir,gpio_pin=4
+
+With the plugin's program driving it over SPI:
+
     dtparam=spi=on
     dtoverlay=gpio-ir,gpio_pin=4
 
-The plugin writes these into its own block of `/boot/userconfig.txt`. The DAC's overlay is written by Volumio when the DAC is chosen in Playback Options, as "Audiophonics I-Sabre ES9028Q2M".
+The plugin writes one pair or the other into its own block of `/boot/userconfig.txt`, as its *Display driver* setting says. The DAC's overlay is written by Volumio when the DAC is chosen in Playback Options, as "Audiophonics I-Sabre ES9028Q2M".
 
 ## The display
 
@@ -31,7 +38,17 @@ A part of the picture is changed by naming a window (column address 0x2A, page a
 
 The start-up the panel is given, after a reset, is in `bins/raspdacmini-panel/src/ili9341.rs`: the power and timing registers and the two gamma curves are the panel maker's values. The memory is written black before the display is switched on (0x29).
 
-Version 1 of the plugin had the kernel drive the panel, through the `fb_ili9341` driver and an overlay of its own, `raspdac-mini-lcd`, which gave the panel as a framebuffer and took the SPI device. Where that overlay is still loaded, `/dev/spidev0.0` does not exist.
+### As a framebuffer
+
+The kernel's `fbtft` overlay with the parameters above loads the `fb_ili9341` driver, which gives the panel as a framebuffer named `fb_ili9341`: 320 x 240, sixteen bits a pixel, each pixel's low byte first. `rotate=90` and `bgr` make the driver write the same address mode, 0xE8. Its number among the framebuffers depends on what else the system has; it is found by its name:
+
+    grep -l fb_ili9341 /sys/class/graphics/fb*/name
+
+The overlay is applied by the firmware, so the framebuffer is there from the first moments of the boot, and whatever draws on framebuffers then draws on the panel: Volumio's boot screens, and the progress of a system update. While the overlay is loaded the kernel holds the SPI device, and `/dev/spidev0.0` does not exist.
+
+After any write to the framebuffer the driver sends the panel the whole picture, at most thirty times a second.
+
+Version 1 of the plugin drove the panel the same way through an overlay of its own, `raspdac-mini-lcd`, which the plugin no longer installs.
 
 ## The DAC's two choices
 

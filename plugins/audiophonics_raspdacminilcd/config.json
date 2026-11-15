@@ -3,6 +3,10 @@
         "type": "boolean",
         "value": true
     },
+    "display_driver": {
+        "type": "string",
+        "value": "framebuffer"
+    },
     "boot_splash": {
         "type": "boolean",
         "value": true

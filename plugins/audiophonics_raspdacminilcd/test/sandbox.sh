@@ -11,6 +11,8 @@ ACTIVE=/tmp/active
 FAILING=/tmp/failing
 LOADED=/tmp/overlays-loaded
 SPI=/tmp/spidev0.0
+GRAPHICS=/tmp/graphics
+HELPER=/usr/local/bin/raspdacmini-boot
 USERCONFIG=/boot/userconfig.txt
 UNIT=/etc/systemd/system/raspdacmini-panel.service
 RULES=/etc/udev/rules.d/70-raspdacmini-remote.rules
@@ -69,8 +71,10 @@ exit 0
 STUB
 chmod +x /usr/local/sbin/systemctl /usr/local/sbin/dtoverlay
 
-# The installer looks for the display's SPI device here, in place of /dev.
+# The installer looks for the display's SPI device and for the kernel's
+# framebuffers here, in place of /dev and /sys.
 export RASPDACMINI_SPI_DEVICE="$SPI"
+export RASPDACMINI_GRAPHICS="$GRAPHICS"
 useradd -m volumio
 
 fail() {
@@ -82,20 +86,31 @@ fail() {
   exit 1
 }
 
-# A player with the plugin's files unpacked and nothing installed yet. The
-# SPI bus is on, as it is on a player that has restarted since the plugin
-# was first installed.
+# A player with the plugin's files unpacked and nothing installed yet: no
+# panel of either kind, and the firmware's own framebuffer.
 player() {
-  rm -rf /data "$CALLS" "$ACTIVE" "$FAILING" "$LOADED" "$SPI" /etc/systemd/system/rdm*.service \
+  rm -rf /data "$CALLS" "$ACTIVE" "$FAILING" "$LOADED" "$SPI" "$GRAPHICS" /etc/systemd/system/rdm*.service \
     /etc/systemd/system/rdmlcd.service.d /etc/systemd/system/raspdacmini*.service "$RULES" "$SUDOERS" \
-    /etc/sudoers.d/volumio-user-raspdac-mini-lcd /usr/local/bin/rdmlcd-*.sh /boot/overlays
+    /etc/sudoers.d/volumio-user-raspdac-mini-lcd /usr/local/bin/rdmlcd-*.sh "$HELPER" /boot/overlays
   rm -f /boot/config.txt /boot/volumioconfig.txt "$USERCONFIG"
-  mkdir -p "$PLUGIN/bin" "$ACTIVE" "$FAILING" /boot /etc/systemd/system /etc/udev/rules.d /etc/sudoers.d /usr/local/bin
+  mkdir -p "$PLUGIN/bin" "$ACTIVE" "$FAILING" "$GRAPHICS/fb0" "$GRAPHICS/fbcon" /boot /etc/systemd/system \
+    /etc/udev/rules.d /etc/sudoers.d /usr/local/bin
+  echo "BCM2708 FB" > "$GRAPHICS/fb0/name"
   cp -r /src/. "$PLUGIN/"
   printf '#!/bin/sh\necho "raspdacmini-panel 1.99.0"\n' > "$PLUGIN/bin/raspdacmini-panel"
   printf 'dtparam=audio=on\n' > /boot/config.txt
-  : > "$SPI"
   : > "$CALLS"
+}
+
+# The panel as the kernel's driver gives it: a framebuffer by its name.
+panel_framebuffer() {
+  mkdir -p "$GRAPHICS/fb1"
+  echo "fb_ili9341" > "$GRAPHICS/fb1/name"
+}
+
+# The panel left to the plugin's program: the SPI device.
+panel_spi() {
+  : > "$SPI"
 }
 
 # Volumio's record of the plugin, as it writes it, and the plugin's settings.
@@ -117,12 +132,17 @@ enabled_plugin() {
   }
 }
 JSON
-  printf '{"lcd_active":{"type":"boolean","value":%s},"sleep_after":{"type":"number","value":900},"boot_splash":{"type":"boolean","value":true}}' "$1" > "$SETTINGS"
+  printf '{"lcd_active":{"type":"boolean","value":%s},"sleep_after":{"type":"number","value":900},"boot_splash":{"type":"boolean","value":true}' "$1" > "$SETTINGS"
+  if [ -n "${2:-}" ]; then
+    printf ',"display_driver":{"type":"string","value":"%s"}' "$2" >> "$SETTINGS"
+  fi
+  printf '}' >> "$SETTINGS"
 }
 
 # What version 1 left on a player: its five services with the folder of
 # settings for one, its five scripts, its sudoers entry, its overlay's file,
-# and its lines in the boot configuration. Its display service is running.
+# and its lines in the boot configuration. Its display service is running,
+# on the framebuffer its overlay gives.
 version_1() {
   mkdir -p "$PLUGIN/compositor" "$PLUGIN/native" "$PLUGIN/scripts" "$PLUGIN/lirc" \
     /etc/systemd/system/rdmlcd.service.d /boot/overlays
@@ -137,6 +157,7 @@ version_1() {
   : > /boot/overlays/raspdac-mini-lcd.dtbo
   : > /data/.rdmlcd-shutdown.log
   : > "$ACTIVE/rdmlcd.service"
+  panel_framebuffer
   printf 'dtoverlay=hifiberry-dac\n\n# RaspDacMini LCD Display\ndtoverlay=raspdac-mini-lcd\n# IR Remote Control (GPIO 4)\ndtoverlay=gpio-ir,gpio_pin=4\n' > "$USERCONFIG"
 }
 
@@ -145,6 +166,9 @@ installed() {
   [ -f "$RULES" ] || fail "$1: the udev rule is not installed"
   [ "$(stat -c %a "$SUDOERS")" = 440 ] || fail "$1: the sudoers entry is not 0440"
   grep -q "enable --now raspdacmini-panel.service" "$SUDOERS" || fail "$1: the plugin may not start the display"
+  grep -q "$HELPER framebuffer, $HELPER spi" "$SUDOERS" || fail "$1: the plugin may not set the boot configuration"
+  [ -x "$HELPER" ] || fail "$1: the boot configuration's helper is not installed"
+  [ "$(stat -c %U "$HELPER")" = root ] || fail "$1: the boot configuration's helper is not root's"
   [ "$(stat -c %U "$PLUGIN/index.js")" = volumio ] || fail "$1: the plugin folder is not volumio's"
   [ -x "$PLUGIN/bin/raspdacmini-panel" ] || fail "$1: the display's program is not executable"
   grep -q "^systemctl daemon-reload" "$CALLS" || fail "$1: systemd was not asked to reload"
@@ -174,13 +198,17 @@ no_version_1() {
 }
 
 block='# >>> raspdac_mini_lcd
+dtoverlay=fbtft,spi0-0,ili9341,bgr,reset_pin=24,dc_pin=27,rotate=90,speed=64000000,fps=30
+dtoverlay=gpio-ir,gpio_pin=4
+# <<< raspdac_mini_lcd'
+block_spi='# >>> raspdac_mini_lcd
 dtparam=spi=on
 dtoverlay=gpio-ir,gpio_pin=4
 # <<< raspdac_mini_lcd'
 
-# --- A fresh install: the two lines go into the plugin's own block. ----------
+# --- A fresh install: the panel's overlay and the receiver's go into the
+# --- plugin's own block, for the kernel to drive the panel. ------------------
 player
-rm -f "$SPI"
 printf 'dtoverlay=hifiberry-dac\n# mine\n' > "$USERCONFIG"
 out=$(sh "$PLUGIN/install.sh")
 echo "$out" | grep -q "^plugininstallend$" || fail "fresh: the install did not finish: $out"
@@ -202,17 +230,30 @@ echo "$out" | grep -q "Restart the player" && fail "second: asked for a restart 
 installed second
 echo "ok: a second install leaves the boot configuration alone"
 
+# --- The helper the plugin runs when the setting changes: the block follows
+# --- the way the display is driven, and says whether it changed. -------------
+[ "$("$HELPER" framebuffer)" = unchanged ] || fail "helper: said the block changed when it had not"
+[ "$("$HELPER" spi)" = changed ] || fail "helper: did not say the block changed"
+[ "$(cat "$USERCONFIG")" = "dtoverlay=hifiberry-dac
+# mine
+$block_spi" ] || fail "helper: the block is not the one for the plugin's program"
+[ "$("$HELPER" framebuffer)" = changed ] || fail "helper: did not say the block changed back"
+[ "$(cat "$USERCONFIG")" = "$expected" ] || fail "helper: the block did not come back as it was"
+if "$HELPER" hdmi > /dev/null 2>&1; then fail "helper: took a driver there is not"; fi
+[ "$(cat "$USERCONFIG")" = "$expected" ] || fail "helper: a driver there is not changed the file"
+echo "ok: the helper turns the block from one driver to the other and back, and says when it changed"
+
 # --- The uninstall takes back everything and leaves the rest. ----------------
 : > "$CALLS"
 out=$(sh "$PLUGIN/uninstall.sh")
 echo "$out" | grep -q "^pluginuninstallend$" || fail "uninstall: did not finish: $out"
 [ "$(cat "$USERCONFIG")" = 'dtoverlay=hifiberry-dac
 # mine' ] || fail "uninstall: the boot configuration is not as it was"
-for left in "$UNIT" "$RULES" "$SUDOERS"; do
+for left in "$UNIT" "$RULES" "$SUDOERS" "$HELPER"; do
   [ ! -e "$left" ] || fail "uninstall: $left is still there"
 done
 grep -q "^systemctl disable raspdacmini-panel.service" "$CALLS" || fail "uninstall: the service was not disabled"
-echo "ok: the uninstall takes back the unit, the rules, the sudoers entry and the block"
+echo "ok: the uninstall takes back the unit, the rules, the sudoers entry, the helper and the block"
 
 # --- A last line with no end is not joined to the block's mark. --------------
 player
@@ -224,13 +265,13 @@ sh "$PLUGIN/uninstall.sh" > /dev/null
 [ "$(cat "$USERCONFIG")" = 'dtoverlay=hifiberry-dac' ] || fail "no end: the uninstall did not leave the line as it found it"
 echo "ok: a last line with no end keeps to itself"
 
-# --- Over version 1 in use, its overlay loaded at boot: everything of it
-# --- goes, its lines become this plugin's block, and the display, which the
-# --- old overlay still holds, is enabled for the restart and not started. ----
+# --- Over version 1 in use: everything of it goes, its lines become this
+# --- plugin's block, and the display starts at once on the framebuffer
+# --- version 1's overlay still gives. ----------------------------------------
 player
 enabled_plugin true
 version_1
-rm -f "$SPI"
+echo "raspdac-mini-lcd" > "$LOADED"
 out=$(sh "$PLUGIN/install.sh")
 echo "$out" | grep -q "^plugininstallend$" || fail "over 1: the install did not finish: $out"
 installed "over 1"
@@ -238,43 +279,68 @@ no_version_1 "over 1"
 [ "$(cat "$USERCONFIG")" = "dtoverlay=hifiberry-dac
 
 $block" ] || fail "over 1: the boot configuration is not as expected"
-grep -q "^systemctl enable raspdacmini-panel.service" "$CALLS" || fail "over 1: the display was not enabled for the restart"
-grep -q "^$STARTED" "$CALLS" && fail "over 1: the display was started while the old overlay holds it"
-echo "$out" | grep -q "stays dark until then" || fail "over 1: no word that the display waits for the restart: $out"
+grep -q "^$STARTED" "$CALLS" || fail "over 1: the display was not started"
+grep -q "^dtoverlay -r" "$CALLS" && fail "over 1: the overlay that gives the framebuffer was taken out"
+echo "$out" | grep -q "The display is running the new version" || fail "over 1: no word that it runs: $out"
+echo "$out" | grep -q "Restart the player to finish the update" || fail "over 1: no word about finishing the update: $out"
 [ "$(grep -c '^dtoverlay=gpio-ir' "$USERCONFIG")" = 1 ] || fail "over 1: the receiver's overlay is there twice"
-echo "ok: over version 1 its footprint goes, and the display waits for the restart the old overlay needs"
+echo "ok: over version 1 its footprint goes and the display starts at once on the framebuffer it left"
 
-# --- Over version 1 with its overlay loaded while the player ran: it is
-# --- taken out, the SPI device comes back, and the display starts at once. ---
+# --- Set to be driven by the plugin's program, with the kernel still
+# --- holding the panel: the block is the other one, and the display waits
+# --- for the restart. --------------------------------------------------------
 player
-enabled_plugin true
-version_1
-rm -f "$SPI"
-echo "raspdac-mini-lcd" > "$LOADED"
-out=$(sh "$PLUGIN/install.sh")
-installed "over 1, unloaded"
-no_version_1 "over 1, unloaded"
-grep -q "^dtoverlay -r raspdac-mini-lcd" "$CALLS" || fail "over 1, unloaded: the overlay was not taken out"
-grep -q "^$STARTED" "$CALLS" || fail "over 1, unloaded: the display was not started"
-echo "$out" | grep -q "The display is running the new version" || fail "over 1, unloaded: no word that it runs: $out"
-echo "ok: an overlay version 1 loaded while running is taken out and the display starts at once"
-
-# --- An update of this version in use starts the display on the new program. -
-player
-enabled_plugin true
+enabled_plugin true spi
+panel_framebuffer
 printf '%s\n' "$block" > "$USERCONFIG"
 out=$(sh "$PLUGIN/install.sh")
-installed update
-grep -q "^$STARTED" "$CALLS" || fail "update: the display was not started"
-[ "$(cat "$USERCONFIG")" = "$block" ] || fail "update: the boot configuration changed"
-echo "$out" | grep -q "The display is running the new version" || fail "update: no word that it runs: $out"
-echo "$out" | grep -q "Restart the player to finish the update" || fail "update: no word about finishing the update"
-grep -q "^systemctl unmask" "$CALLS" && fail "update: something was unmasked with nothing of version 1 there"
-echo "ok: an update of a plugin in use starts the display on the new program"
+installed "to spi"
+[ "$(cat "$USERCONFIG")" = "$block_spi" ] || fail "to spi: the boot configuration is not as expected"
+grep -q "^systemctl enable raspdacmini-panel.service" "$CALLS" || fail "to spi: the display was not enabled for the restart"
+grep -q "^$STARTED" "$CALLS" && fail "to spi: the display was started while the kernel holds the panel"
+echo "$out" | grep -q "stays dark until then" || fail "to spi: no word that the display waits for the restart: $out"
+echo "ok: set to the plugin's program while the kernel holds the panel, the display waits for the restart"
+
+# --- The same with version 1's overlay loaded while the player ran: it is
+# --- taken out, the SPI device comes back, and the display starts at once. ---
+player
+enabled_plugin true spi
+version_1
+echo "raspdac-mini-lcd" > "$LOADED"
+out=$(sh "$PLUGIN/install.sh")
+installed "to spi, unloaded"
+no_version_1 "to spi, unloaded"
+grep -q "^dtoverlay -r raspdac-mini-lcd" "$CALLS" || fail "to spi, unloaded: the overlay was not taken out"
+grep -q "^$STARTED" "$CALLS" || fail "to spi, unloaded: the display was not started"
+echo "$out" | grep -q "The display is running the new version" || fail "to spi, unloaded: no word that it runs: $out"
+echo "ok: an overlay version 1 loaded while running is taken out for the plugin's program, which starts at once"
+
+# --- An update of this version in use, either way it is driven. --------------
+for driver in framebuffer spi; do
+  player
+  enabled_plugin true "$driver"
+  if [ "$driver" = spi ]; then
+    panel_spi
+    printf '%s\n' "$block_spi" > "$USERCONFIG"
+  else
+    panel_framebuffer
+    printf '%s\n' "$block" > "$USERCONFIG"
+  fi
+  before=$(cat "$USERCONFIG")
+  out=$(sh "$PLUGIN/install.sh")
+  installed "update, $driver"
+  grep -q "^$STARTED" "$CALLS" || fail "update, $driver: the display was not started"
+  [ "$(cat "$USERCONFIG")" = "$before" ] || fail "update, $driver: the boot configuration changed"
+  echo "$out" | grep -q "The display is running the new version" || fail "update, $driver: no word that it runs: $out"
+  echo "$out" | grep -q "Restart the player to finish the update" || fail "update, $driver: no word about finishing the update"
+  grep -q "^systemctl unmask" "$CALLS" && fail "update, $driver: something was unmasked with nothing of version 1 there"
+done
+echo "ok: an update of a plugin in use starts the display on the new program, whichever way it is driven"
 
 # --- A display that does not stay up is said, not passed over. ---------------
 player
 enabled_plugin true
+panel_framebuffer
 : > "$FAILING/raspdacmini-panel.service"
 out=$(sh "$PLUGIN/install.sh")
 echo "$out" | grep -q "did not stay up" || fail "not up: no word about it: $out"
@@ -284,6 +350,7 @@ echo "ok: a display that does not stay up is said so"
 # --- A display switched off in the settings stays off through an update. -----
 player
 enabled_plugin false
+panel_framebuffer
 printf '%s\n' "$block" > "$USERCONFIG"
 out=$(sh "$PLUGIN/install.sh")
 installed "display off"
@@ -298,7 +365,7 @@ printf 'dtoverlay=gpio-ir,gpio_pin=4,rc-map-name=rc-empty\n# IR Remote Control (
 sh "$PLUGIN/install.sh" > /dev/null
 [ "$(cat "$USERCONFIG")" = 'dtoverlay=gpio-ir,gpio_pin=4,rc-map-name=rc-empty
 # >>> raspdac_mini_lcd
-dtparam=spi=on
+dtoverlay=fbtft,spi0-0,ili9341,bgr,reset_pin=24,dc_pin=27,rotate=90,speed=64000000,fps=30
 # <<< raspdac_mini_lcd' ] || fail "variant: the boot configuration is not as expected"
 echo "ok: a receiver overlay already there is kept and not written a second time"
 

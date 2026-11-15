@@ -18,6 +18,7 @@
                 "label": "TRANSLATE.RASPDACMINI.SAVE",
                 "data": [
                     "lcd_active",
+                    "display_driver",
                     "boot_splash",
                     "sleep_after"
                 ]
@@ -29,6 +30,26 @@
                     "label": "TRANSLATE.RASPDACMINI.LCD_ACTIVE",
                     "doc": "TRANSLATE.RASPDACMINI.LCD_ACTIVE_DOC",
                     "value": true
+                },
+                {
+                    "id": "display_driver",
+                    "element": "select",
+                    "label": "TRANSLATE.RASPDACMINI.DISPLAY_DRIVER",
+                    "doc": "TRANSLATE.RASPDACMINI.DISPLAY_DRIVER_DOC",
+                    "value": {
+                        "value": "framebuffer",
+                        "label": "TRANSLATE.RASPDACMINI.DRIVER_FRAMEBUFFER"
+                    },
+                    "options": [
+                        {
+                            "value": "framebuffer",
+                            "label": "TRANSLATE.RASPDACMINI.DRIVER_FRAMEBUFFER"
+                        },
+                        {
+                            "value": "spi",
+                            "label": "TRANSLATE.RASPDACMINI.DRIVER_SPI"
+                        }
+                    ]
                 },
                 {
                     "id": "boot_splash",

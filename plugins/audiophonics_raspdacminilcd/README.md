@@ -10,7 +10,9 @@ Text in any script is drawn: DejaVu Sans has Latin, Greek, Cyrillic and many mor
 
 **The second page**, reached with the Down key of the remote, keeps the track at the top and lists what is known of the stream: sample rate, bit depth, bit rate, channels, the kind of track, its place in the queue, and the DAC's filter. Down again goes back.
 
-While the DAC takes its other input the screen says which, in large letters. While nothing plays and no key is pressed the screen goes black after a time you choose. The plugin shows the Audiophonics mark while the player starts, and says so when it shuts down or restarts.
+While the DAC takes its other input the screen says which, in large letters. While nothing plays and no key is pressed the screen goes black after a time you choose. The plugin shows the Audiophonics mark while the player's software starts, and says so when it shuts down or restarts.
+
+**The player's own screens.** The display is the system's from the first moments of a start: Volumio's start-up and shutdown screens show on it, and so does the progress of a system update, so the unit never looks dead while it is busy. The plugin draws once those are done. This is the *System framebuffer* display driver; see [Display driver](#display-driver) for the other.
 
 **The remote.** The streamer acts on every key:
 
@@ -38,14 +40,15 @@ While the DAC takes its other input the screen says which, in large letters. Whi
 
 Install the plugin from Volumio's plugin store, under System Hardware, and enable it. The first installation switches on the SPI bus and the remote's receiver in the boot configuration: **restart the player once** when the plugin asks.
 
-Installing over version 1 of the plugin replaces it and keeps your settings. Version 1 had the kernel drive the display, and that holds the display until the player restarts: **restart the player** after the update, and the display comes up on the new version. Until then it stays dark.
+Installing over version 1 of the plugin replaces it, keeps your settings and starts the new display at once. Restart the player afterwards to finish the update: until then the settings page is still version 1's.
 
 ## Settings
 
 | Setting | What it does |
 | --- | --- |
 | Display on | Off stops the display's program: the screen stays black and the remote is not read. |
-| Mark at start and at shutdown | The Audiophonics mark with a word under it while the player starts, shuts down or restarts. Off leaves the screen black at those times. |
+| Display driver | *System framebuffer*, or *Direct*. A change takes effect when the player has restarted. |
+| Mark at start and at shutdown | The Audiophonics mark with a word under it while the player's software starts, shuts down or restarts. Off leaves the screen black at those times. |
 | Black after | Seconds after the last key on the remote, while nothing plays, before the screen goes black. 0 never goes black. |
 | Obey the remote | Off leaves every key without effect. |
 | Check the remote | Says whether the receiver is being read and which key arrived last. |
@@ -55,9 +58,25 @@ Settings take effect when saved.
 
 The display has no line to switch its light off, so a black screen still glows a little.
 
+## Display driver
+
+The display can be driven in one of two ways. They cannot share it, so the choice is written into the boot configuration and takes effect when the player restarts.
+
+| | System framebuffer | Direct |
+| --- | --- | --- |
+| Who drives the display | the kernel's own driver for it, loaded at boot | the plugin's program, over SPI |
+| Volumio's start-up and shutdown screens | shown | not shown |
+| The progress of a system update | shown | not shown: the screen is black until the update is done |
+| Before the plugin's program runs | the system's screens | nothing |
+| What is sent to the display | the whole picture at each change | only the part that changed |
+
+*System framebuffer* is what the plugin sets unless you choose otherwise. *Direct* is there for a system whose kernel does not have the display's driver.
+
 ## What it installs
 
-One small native program runs the display and the remote; nothing is compiled on the player, and no package is installed. Outside its own folder, the plugin installs one systemd unit (`raspdacmini-panel.service`), udev rules for the receiver's decoder and its device, a sudoers entry for switching the service, and a marked block of two lines in `/boot/userconfig.txt`. Uninstalling removes them all.
+One small native program runs the display and the remote; nothing is compiled on the player, and no package is installed. Outside its own folder, the plugin installs one systemd unit (`raspdacmini-panel.service`), udev rules for the receiver's decoder and its device, a helper that writes the plugin's lines in the boot configuration (`/usr/local/bin/raspdacmini-boot`), a sudoers entry for switching the service and running that helper, and a marked block of two lines in `/boot/userconfig.txt`. Uninstalling removes them all.
+
+The display's driver is the kernel's own `fbtft` overlay, which comes with the system; the plugin ships no overlay.
 
 Installing also removes what version 1 installed: its five services, its helper scripts, its sudoers entry, its display overlay and its lines in the boot configuration; and it gives back the system's lirc services and boot splash, which version 1 had masked. The packages version 1 installed are left in place.
 
@@ -73,8 +92,8 @@ Set *Detail* to Changes to see each change of the player's state, each key, and 
 
 | What you see | What to look at |
 | --- | --- |
-| The screen stays dark after installing over version 1 | The player has not restarted since. |
-| The screen stays dark after a first installation | The SPI bus is switched on at the next restart. The journal says `/dev/spidev0.0` is not there until then. |
+| The screen stays dark after a first installation, or after changing the display driver | The display's driver is loaded at the next restart. The journal says which is missing until then: `no framebuffer named fb_ili9341`, or `/dev/spidev0.0`. |
+| The screen shows nothing during a system update | The display driver is set to *Direct*. |
 | The remote does nothing | *Check the remote* says whether the receiver is read. The receiver is switched on at the first restart after installing. |
 | Input and Up do nothing, and the second page shows no filter | The journal says `no sound card named I-Sabre Q2M DAC`: choose the DAC in Playback Options. |
 | No cover | The journal says why once for each cover: the address and what `curl` or the decoder said. |

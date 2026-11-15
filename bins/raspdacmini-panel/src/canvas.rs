@@ -258,6 +258,19 @@ impl Frame {
         out
     }
 
+    /// Whole rows of the frame, from row `first`, each colour's low byte
+    /// first: the order a framebuffer's memory holds them in on these
+    /// boards.
+    pub fn rows(&self, first: u32, count: u32) -> Vec<u8> {
+        let from = (first * WIDTH) as usize;
+        let to = ((first + count) * WIDTH) as usize;
+        let mut out = Vec::with_capacity((to - from) * 2);
+        for colour in &self.px[from..to] {
+            out.extend_from_slice(&colour.to_le_bytes());
+        }
+        out
+    }
+
     /// The smallest rectangle outside which this frame is what `shown` is,
     /// or `None` when the two are the same: all of the glass that has to be
     /// sent to turn one into the other.
@@ -386,6 +399,18 @@ mod tests {
         assert_eq!(f.get(1, 0), 0xF800);
         assert_eq!(f.bytes(Area::new(0, 0, 2, 1)), [0, 0, 0xF8, 0x00]);
         assert_eq!(f.bytes(Area::ALL).len(), 320 * 240 * 2);
+    }
+
+    #[test]
+    fn rows_for_a_framebuffer_are_whole_and_low_byte_first() {
+        let mut c = Canvas::new();
+        c.set(1, 2, [255, 0, 0]);
+        let f = Frame::from(&c);
+        let rows = f.rows(2, 1);
+        assert_eq!(rows.len(), 640);
+        assert_eq!(rows[..4], [0, 0, 0x00, 0xF8]);
+        assert_eq!(f.rows(0, 240).len(), 320 * 240 * 2);
+        assert!(f.rows(0, 2).iter().all(|&b| b == 0));
     }
 
     #[test]
