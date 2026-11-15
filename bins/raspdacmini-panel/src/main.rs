@@ -34,6 +34,7 @@ mod config;
 mod cover;
 mod dac;
 mod fbdev;
+mod gate;
 mod gauge;
 mod handover;
 mod icons;
@@ -62,6 +63,7 @@ use canvas::{Area, Canvas, Frame, Rgb};
 use config::{Config, Place};
 use cover::{Arrived, Covers, Shelf};
 use dac::{Amixer, Dac};
+use gate::{Gate, Opened};
 use keys::{Action, Keys};
 use mark::Mark;
 use pages::{Page, Pages};
@@ -132,6 +134,8 @@ const PATIENCE: u32 = 12;
 /// takes a second or more to say what it would otherwise say at once, and
 /// asking it again sooner only gets no answer again.
 const SLOW_ANSWER: Duration = Duration::from_secs(2);
+/// How often the dots under "Getting ready" step on.
+const WAITING_STEP: Duration = Duration::from_millis(500);
 /// How often it is asked whether the system's splash has the screen.
 const SPLASH_EVERY: Duration = Duration::from_millis(500);
 
@@ -437,6 +441,9 @@ fn run(path: &str) -> Result<(), String> {
     let mut waiting = Volumio::new(cfg.player_base.clone(), SLOW_ANSWER);
     let mut late = false;
     let mut probe = Probe::tolerating(PATIENCE);
+    // A player that answers is not shown until it says it has finished
+    // starting: see `gate`.
+    let mut gate = Gate::new(started);
     let covers = {
         let tx = tx.clone();
         Covers::start(cfg.player_base.clone(), move |arrived| {
@@ -621,6 +628,25 @@ fn run(path: &str) -> Result<(), String> {
             }
             next_poll = now + cfg.poll_interval;
         }
+        // A player that answers has not finished starting until it says
+        // so. It is asked until it does; one that went is asked afresh
+        // when it is back.
+        if probe.state().is_none() {
+            gate.shut(now);
+        } else if gate.due(now) {
+            match gate.heard(volumio.readiness().ok(), now) {
+                Some(Opened::Ready) => info!("player: ready"),
+                Some(Opened::Unsaid) => {
+                    info!("player: it has no word for whether it is ready, and is not waited for");
+                }
+                Some(Opened::Failed) => error!("player: it says its start failed"),
+                Some(Opened::GaveUp) => error!(
+                    "player: still starting after {} s, and not waited for any longer",
+                    gate::LONGEST.as_secs()
+                ),
+                None => {}
+            }
+        }
         if let Some(action) = keys.due(now) {
             if act(action, &volumio, &mut dac_board, &mut pages, now) {
                 next_poll = now;
@@ -658,6 +684,23 @@ fn run(path: &str) -> Result<(), String> {
                     splash(&cfg, mark.as_ref(), &cfg.starting_text, &mut faces)
                 }
                 Some(_) if started.elapsed() < GREETING_HOLD => greeting.clone(),
+                // The player answers and has not finished starting: the
+                // mark stays, with a word for it and a sign of life.
+                Some(_) if !gate.open() => {
+                    pages.reset();
+                    let mut canvas = Canvas::new();
+                    if cfg.splash {
+                        let baseline = screens::splash(
+                            &mut canvas,
+                            mark.as_ref(),
+                            &cfg.ready_text,
+                            &mut faces,
+                        );
+                        let step = started.elapsed().as_millis() / WAITING_STEP.as_millis();
+                        screens::waiting(&mut canvas, baseline, step as u32);
+                    }
+                    canvas
+                }
                 Some(state) => {
                     let mut state = state.clone();
                     if state.status.is_empty() {
@@ -760,6 +803,9 @@ fn run(path: &str) -> Result<(), String> {
         }
         if !asleep && !yielded {
             let player_up = probe.state().is_some();
+            if let (true, Some(at)) = (player_up, gate.ask_at()) {
+                wake = wake.min(at).min(now + WAITING_STEP);
+            }
             if player_up && (pages.sliding(now) || screens.moving() || metering) {
                 // Something moves: the loop comes round on every beat, and
                 // the board is read after one of them.

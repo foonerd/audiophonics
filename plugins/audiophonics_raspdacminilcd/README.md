@@ -10,7 +10,7 @@ Text in any script is drawn: DejaVu Sans has Latin, Greek, Cyrillic and many mor
 
 **The second page**, reached with the Down key of the remote, keeps the track at the top and lists what is known of the stream: sample rate, bit depth, bit rate, channels, the kind of track, its place in the queue, and the DAC's filter. Down again goes back.
 
-While the DAC takes its other input the screen says which, in large letters. While nothing plays and no key is pressed the screen goes black after a time you choose. The plugin shows the Audiophonics mark while the player's software starts, and says so when it shuts down or restarts.
+While the DAC takes its other input the screen says which, in large letters. While nothing plays and no key is pressed the screen goes black after a time you choose. The plugin shows the Audiophonics mark while the player's software starts: with *Starting* under it until the player answers, then with *Getting ready* until the player says it has finished starting, which is some time after it first answers. The track's page comes up then. The mark is shown again, with a word for it, when the player shuts down or restarts.
 
 **Level meters**, when they are switched on, stand on the first page: one a channel, upright beside the cover or lying over the track's line. See *Level meters* below.
 

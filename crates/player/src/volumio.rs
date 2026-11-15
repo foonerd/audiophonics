@@ -2,7 +2,7 @@
 //! backend serves on loopback.
 
 use crate::http;
-use crate::{Ask, Error, Player, Result, Seek, State, Transport};
+use crate::{Ask, Error, Player, Readiness, Result, Seek, State, Transport};
 use std::time::Duration;
 
 #[derive(Clone)]
@@ -55,6 +55,12 @@ impl Volumio {
             Err(e) if http::timed_out(&e) => Ok(()),
             Err(e) => Err(e.into()),
         }
+    }
+
+    /// Where the player's own start is, in its own word.
+    pub fn readiness(&self) -> Result<Readiness> {
+        let body = http::get(&self.url("/status"), self.timeout)?;
+        Ok(Readiness::parse(&body))
     }
 
     /// How many tracks the queue holds.

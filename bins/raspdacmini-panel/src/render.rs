@@ -76,6 +76,12 @@ pub fn all(dir: &Path, assets: &Path) -> Result<Vec<PathBuf>, String> {
         screens::splash(&mut canvas, mark.as_ref(), word, &mut faces);
         shots.push((name, canvas));
     }
+    // The player answers and has not finished starting: the word for it,
+    // and the dots that step while it is waited for.
+    let mut canvas = Canvas::new();
+    let baseline = screens::splash(&mut canvas, mark.as_ref(), "Getting ready", &mut faces);
+    screens::waiting(&mut canvas, baseline, 1);
+    shots.push(("getting-ready", canvas));
 
     let square = art::backdrop(&art::sample(600, 600));
     let wide = art::backdrop(&art::sample(900, 400));
@@ -223,7 +229,7 @@ mod tests {
     fn every_screen_is_written_as_a_panel_sized_image() {
         let dir = std::env::temp_dir().join(format!("raspdacmini-render-{}", std::process::id()));
         let files = all(&dir, &assets()).unwrap();
-        assert_eq!(files.len(), 20);
+        assert_eq!(files.len(), 21);
         for file in &files {
             let bytes = std::fs::read(file).unwrap();
             assert!(
@@ -245,7 +251,7 @@ mod tests {
     fn the_screens_are_drawn_without_any_asset_at_all() {
         let dir = std::env::temp_dir().join(format!("raspdacmini-bare-{}", std::process::id()));
         let files = all(&dir, Path::new("/nonexistent")).unwrap();
-        assert_eq!(files.len(), 20);
+        assert_eq!(files.len(), 21);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

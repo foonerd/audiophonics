@@ -90,6 +90,9 @@ pub struct Config {
     /// show, and goes black when the player goes.
     pub splash: bool,
     pub starting_text: String,
+    /// The word under the mark while a player that answers has not yet
+    /// said it has finished starting.
+    pub ready_text: String,
     pub farewell_text: String,
     pub restart_text: String,
 
@@ -127,6 +130,7 @@ impl Default for Config {
 
             splash: true,
             starting_text: "Starting".into(),
+            ready_text: "Getting ready".into(),
             farewell_text: "Shutting down".into(),
             restart_text: "Restarting".into(),
 
@@ -236,6 +240,7 @@ pub fn from_store(store: &Store) -> (Config, Vec<String>) {
         ("spi_device", &mut c.wiring.spi_device),
         ("assets", &mut c.assets),
         ("starting_text", &mut c.starting_text),
+        ("ready_text", &mut c.ready_text),
         ("farewell_text", &mut c.farewell_text),
         ("restart_text", &mut c.restart_text),
     ] {

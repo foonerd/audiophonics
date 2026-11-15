@@ -69,6 +69,12 @@ const INPUT_BASELINE: i32 = 162;
 const SPLASH_TEXT: u32 = 20;
 /// Between the mark and the word under it.
 const SPLASH_GAP: i32 = 22;
+/// The dots that step while the player is waited for: their size, how far
+/// apart, how far under the word, and the colour of one that is not lit.
+const WAITING_DOT: u32 = 4;
+const WAITING_PITCH: i32 = 12;
+const WAITING_UNDER: i32 = 14;
+const WAITING_DIM: Rgb = [56, 56, 56];
 
 /// What a screen is drawn from, besides the cover.
 #[derive(Debug, Clone, Copy)]
@@ -290,9 +296,9 @@ pub fn input(canvas: &mut Canvas, name: &str, shown: &Shown, faces: &mut Faces) 
 }
 
 /// A mark with a word under it, in the middle of a black screen: the
-/// player starting, shutting down, restarting. Without a mark the word
-/// stands alone.
-pub fn splash(canvas: &mut Canvas, mark: Option<&Mark>, word: &str, faces: &mut Faces) {
+/// player starting, getting ready, shutting down, restarting. Without a
+/// mark the word stands alone. Returns the row the word's baseline is on.
+pub fn splash(canvas: &mut Canvas, mark: Option<&Mark>, word: &str, faces: &mut Faces) -> i32 {
     canvas.fill(BLACK);
     let word = plain(word);
     let centre = WIDTH as i32 / 2;
@@ -304,11 +310,32 @@ pub fn splash(canvas: &mut Canvas, mark: Option<&Mark>, word: &str, faces: &mut 
             mark.draw(canvas, centre, top);
             let baseline = top + mark.height as i32 + SPLASH_GAP + SPLASH_TEXT as i32 * 3 / 4;
             faces.draw(canvas, &word, left, baseline, SPLASH_TEXT, QUIET);
+            baseline
         }
         None => {
             let baseline = HEIGHT as i32 / 2 + SPLASH_TEXT as i32 / 3;
             faces.draw(canvas, &word, left, baseline, SPLASH_TEXT, WHITE);
+            baseline
         }
+    }
+}
+
+/// Three dots under a splash's word, one of them lit, the next at each
+/// step: a sign that the unit is alive while the player is waited for.
+pub fn waiting(canvas: &mut Canvas, baseline: i32, step: u32) {
+    let first = WIDTH as i32 / 2 - WAITING_PITCH - WAITING_DOT as i32 / 2;
+    for dot in 0..3u32 {
+        let x = first + dot as i32 * WAITING_PITCH;
+        let colour = if dot == step % 3 { QUIET } else { WAITING_DIM };
+        canvas.fill_area(
+            Area::new(
+                x as u32,
+                (baseline + WAITING_UNDER) as u32,
+                WAITING_DOT,
+                WAITING_DOT,
+            ),
+            colour,
+        );
     }
 }
 

@@ -174,6 +174,33 @@ pub enum Ask {
     Shuffle,
 }
 
+/// Where a player's own start is, in its own word. A player answers
+/// requests well before it has finished starting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Readiness {
+    /// Its web server is up; the rest of it is still starting.
+    Starting,
+    /// It has finished starting.
+    Ready,
+    /// It says its start failed.
+    Failed,
+    /// It has no word for it: it answered with something else.
+    Unsaid,
+}
+
+impl Readiness {
+    /// What Volumio answers at `/status`: `starting`, `ready` or `error`.
+    /// A Volumio that does not serve that address answers with a page.
+    pub fn parse(body: &str) -> Self {
+        match body.trim() {
+            "starting" => Self::Starting,
+            "ready" => Self::Ready,
+            "error" => Self::Failed,
+            _ => Self::Unsaid,
+        }
+    }
+}
+
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
@@ -211,6 +238,17 @@ pub trait Player {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_players_word_for_its_start_is_one_of_three_or_none() {
+        assert_eq!(Readiness::parse("starting"), Readiness::Starting);
+        assert_eq!(Readiness::parse("ready\n"), Readiness::Ready);
+        assert_eq!(Readiness::parse(" error "), Readiness::Failed);
+        // A player that does not serve the address answers with its page.
+        assert_eq!(Readiness::parse("<!doctype html><html>"), Readiness::Unsaid);
+        assert_eq!(Readiness::parse(""), Readiness::Unsaid);
+        assert_eq!(Readiness::parse("READY"), Readiness::Unsaid);
+    }
 
     #[test]
     fn state_tolerates_a_sparse_body() {
