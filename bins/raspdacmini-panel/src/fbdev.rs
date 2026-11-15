@@ -15,6 +15,7 @@
 //! than the picture changes.
 
 use crate::canvas::{Area, Frame, HEIGHT, WIDTH};
+use crate::handover;
 use std::fs::{File, OpenOptions};
 use std::os::unix::fs::FileExt;
 use std::path::{Path, PathBuf};
@@ -99,10 +100,10 @@ impl FbDev {
             ));
         }
         let path: PathBuf = devices.join(&name);
-        let file = OpenOptions::new()
-            .write(true)
-            .open(&path)
-            .map_err(|e| format!("{}: {e}", path.display()))?;
+        let file = handover::open(&path.display().to_string(), || {
+            OpenOptions::new().write(true).open(&path)
+        })
+        .map_err(|e| format!("{}: {e}", path.display()))?;
         Ok(Self {
             file,
             stride,

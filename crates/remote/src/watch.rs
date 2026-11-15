@@ -18,6 +18,19 @@ pub const OFF: &str = "switched off on the settings page";
 /// looked at again.
 pub const LOOK_AGAIN: Duration = Duration::from_secs(5);
 
+/// A receiver that cannot be found or read is not spoken of for this long
+/// after it was first refused, and is looked at again this soon: at boot a
+/// daemon can be up before udev has handed the receiver over to it, which
+/// passes within a second or two.
+const GRACE: Duration = Duration::from_secs(3);
+const SOON: Duration = Duration::from_millis(500);
+
+/// True while a refusal first met at `since` is still too young to be
+/// spoken of.
+fn young(since: Instant, now: Instant) -> bool {
+    now.saturating_duration_since(since) < GRACE
+}
+
 /// The receiver as a daemon's loop keeps it: whether it is being read and
 /// how, what there is to say of it, and when to look at it again.
 pub struct Watch {
@@ -26,6 +39,8 @@ pub struct Watch {
     decoder_on: bool,
     line: String,
     look_again: Instant,
+    /// When the receiver was first refused, while it still is.
+    refused_since: Option<Instant>,
 }
 
 impl Watch {
@@ -36,6 +51,7 @@ impl Watch {
             decoder_on: false,
             line: "not looked for yet".to_string(),
             look_again: now,
+            refused_since: None,
         }
     }
 
@@ -54,9 +70,15 @@ impl Watch {
         self.look_again = now + LOOK_AGAIN;
         if self.reading.is_none() {
             if let Err(e) = self.start(tx, wrap) {
-                self.say(e);
+                let since = *self.refused_since.get_or_insert(now);
+                if young(since, now) {
+                    self.look_again = now + SOON;
+                } else {
+                    self.say(e);
+                }
                 return;
             }
+            self.refused_since = None;
         }
         let line = self.describe();
         self.say(line);
@@ -125,6 +147,7 @@ impl Watch {
         self.receiver = None;
         self.reading = None;
         self.decoder_on = false;
+        self.refused_since = None;
         self.look_again = now + LOOK_AGAIN;
         self.say(format!("the receiver stopped answering: {why}"));
     }
@@ -137,5 +160,35 @@ impl Watch {
     /// Look at the receiver again at once, not when it next falls due.
     pub fn look_now(&mut self, now: Instant) {
         self.look_again = now;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_refusal_is_not_spoken_of_until_it_has_lasted() {
+        let first = Instant::now();
+        assert!(young(first, first));
+        assert!(young(first, first + SOON));
+        assert!(young(first, first + GRACE - Duration::from_millis(1)));
+        assert!(!young(first, first + GRACE));
+        assert!(!young(first, first + LOOK_AGAIN));
+    }
+
+    #[test]
+    fn a_refusal_is_looked_at_again_several_times_before_it_is_spoken_of() {
+        assert!(SOON * 4 <= GRACE);
+        assert!(GRACE < LOOK_AGAIN);
+    }
+
+    #[test]
+    fn a_new_watch_looks_at_once_and_has_met_no_refusal() {
+        let now = Instant::now();
+        let watch = Watch::new(now);
+        assert!(watch.due(now));
+        assert!(watch.refused_since.is_none());
+        assert_eq!(watch.line(), "not looked for yet");
     }
 }

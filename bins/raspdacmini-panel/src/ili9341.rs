@@ -12,6 +12,7 @@
 //! red. Both are in the one byte written to the address mode register.
 
 use crate::canvas::{Area, Frame, HEIGHT, WIDTH};
+use crate::handover;
 use gpio_cdev::LineHandle;
 use spidev::{SpiModeFlags, Spidev, SpidevOptions};
 use std::io::Write;
@@ -171,18 +172,19 @@ pub struct Spi {
 
 impl Spi {
     pub fn open(wiring: &Wiring) -> Result<Self> {
-        let mut spi = Spidev::open(&wiring.spi_device).map_err(|e| {
-            format!(
-                "{}: {e}{}",
-                wiring.spi_device,
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    "; the SPI bus is switched on in the boot configuration, which takes \
+        let mut spi = handover::open(&wiring.spi_device, || Spidev::open(&wiring.spi_device))
+            .map_err(|e| {
+                format!(
+                    "{}: {e}{}",
+                    wiring.spi_device,
+                    if e.kind() == std::io::ErrorKind::NotFound {
+                        "; the SPI bus is switched on in the boot configuration, which takes \
                      effect when the player has restarted"
-                } else {
-                    ""
-                }
-            )
-        })?;
+                    } else {
+                        ""
+                    }
+                )
+            })?;
         spi.configure(
             &SpidevOptions::new()
                 .bits_per_word(8)

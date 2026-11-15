@@ -33,6 +33,7 @@ mod config;
 mod cover;
 mod dac;
 mod fbdev;
+mod handover;
 mod icons;
 mod ili9341;
 mod keys;
