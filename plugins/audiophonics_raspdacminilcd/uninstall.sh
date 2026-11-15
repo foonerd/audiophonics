@@ -17,7 +17,7 @@ systemctl disable "$SERVICE.service" 2>/dev/null || true
 rm -f "$UNIT"
 systemctl daemon-reload
 
-rm -f "$SUDOERS" "$RULES" /usr/local/bin/raspdacmini-boot
+rm -f "$SUDOERS" "$RULES" /usr/local/bin/raspdacmini-boot /usr/local/bin/raspdacmini-leaving
 udevadm control --reload 2>/dev/null || true
 
 # The lines the plugin wrote into the boot configuration, between its marks.

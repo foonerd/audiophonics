@@ -14,7 +14,9 @@ While the DAC takes its other input the screen says which, in large letters. Whi
 
 **Level meters**, when they are switched on, stand on the first page: one a channel, upright beside the cover or lying over the track's line. See *Level meters* below.
 
-**The player's own screens.** The display is the system's from the first moments of a start: Volumio's start-up and shutdown screens show on it, and so does the progress of a system update, so the unit never looks dead while it is busy. The plugin draws once those are done. This is the *System framebuffer* display driver; see [Display driver](#display-driver) for the other.
+**The player's own screens.** The display is the system's from the first moments of a start: Volumio's start-up and shutdown screens show on it, and so does the progress of a system update, so the unit never looks dead while it is busy. The plugin draws once those are done.
+
+**Shutting down and restarting.** The system's own shutdown screen comes up some seconds after a shutdown or a restart has begun. Until it does, the display shows the mark with *Shutting down* or *Restarting* under it, whoever asked for it: the player, a command, an update. Where no system screen comes, *Restarting* stays until the next start, and *Shutting down* gives way to a black screen after a few seconds. This is the *System framebuffer* display driver; see [Display driver](#display-driver) for the other.
 
 **The remote.** The streamer acts on every key:
 
@@ -97,7 +99,7 @@ The display can be driven in one of two ways. They cannot share it, so the choic
 
 ## What it installs
 
-One small native program runs the display and the remote; nothing is compiled on the player, and no package is installed. Outside its own folder, the plugin installs one systemd unit (`raspdacmini-panel.service`), udev rules for the receiver's decoder and its device, a helper that writes the plugin's lines in the boot configuration (`/usr/local/bin/raspdacmini-boot`), a sudoers entry for switching the service and running that helper, and a marked block of two lines in `/boot/userconfig.txt`. Uninstalling removes them all.
+One small native program runs the display and the remote; nothing is compiled on the player, and no package is installed. Outside its own folder, the plugin installs one systemd unit (`raspdacmini-panel.service`), udev rules for the receiver's decoder and its device, a helper that writes the plugin's lines in the boot configuration (`/usr/local/bin/raspdacmini-boot`), another that tells the display, as its service is stopped, whether the system is shutting down or restarting (`/usr/local/bin/raspdacmini-leaving`), a sudoers entry for switching the service and running that helper, and a marked block of two lines in `/boot/userconfig.txt`. Uninstalling removes them all.
 
 The display's driver is the kernel's own `fbtft` overlay, which comes with the system; the plugin ships no overlay.
 

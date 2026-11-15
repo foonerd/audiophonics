@@ -136,6 +136,10 @@ const PATIENCE: u32 = 12;
 const SLOW_ANSWER: Duration = Duration::from_secs(2);
 /// How often the dots under "Getting ready" step on.
 const WAITING_STEP: Duration = Duration::from_millis(500);
+/// How long a goodbye waits for the system's own shutdown screen to come
+/// up before the screen is made black without it, and how often it looks.
+const SPLASH_WAIT: Duration = Duration::from_secs(6);
+const SPLASH_LOOK: Duration = Duration::from_millis(100);
 /// How often it is asked whether the system's splash has the screen.
 const SPLASH_EVERY: Duration = Duration::from_millis(500);
 
@@ -549,7 +553,17 @@ fn run(path: &str) -> Result<(), String> {
             let black = Canvas::new();
             let way = leaving::at_stop(going);
             if way == leaving::AtStop::HoldThenBlank {
-                std::thread::sleep(leaving::HOLD);
+                if panel.shared() {
+                    // The system has a screen of its own for a shutdown,
+                    // which comes up some seconds into it: the word stays
+                    // until that is up, and is not taken away before.
+                    let until = Instant::now() + SPLASH_WAIT;
+                    while !plymouth::running() && Instant::now() < until {
+                        std::thread::sleep(SPLASH_LOOK);
+                    }
+                } else {
+                    std::thread::sleep(leaving::HOLD);
+                }
             }
             // The system's splash, where it has come up to see the system
             // down, keeps the screen.

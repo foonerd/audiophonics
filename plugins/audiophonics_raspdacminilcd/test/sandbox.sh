@@ -13,6 +13,7 @@ LOADED=/tmp/overlays-loaded
 SPI=/tmp/spidev0.0
 GRAPHICS=/tmp/graphics
 HELPER=/usr/local/bin/raspdacmini-boot
+LEAVING=/usr/local/bin/raspdacmini-leaving
 USERCONFIG=/boot/userconfig.txt
 UNIT=/etc/systemd/system/raspdacmini-panel.service
 RULES=/etc/udev/rules.d/70-raspdacmini-remote.rules
@@ -91,7 +92,7 @@ fail() {
 player() {
   rm -rf /data "$CALLS" "$ACTIVE" "$FAILING" "$LOADED" "$SPI" "$GRAPHICS" /etc/systemd/system/rdm*.service \
     /etc/systemd/system/rdmlcd.service.d /etc/systemd/system/raspdacmini*.service "$RULES" "$SUDOERS" \
-    /etc/sudoers.d/volumio-user-raspdac-mini-lcd /usr/local/bin/rdmlcd-*.sh "$HELPER" /boot/overlays
+    /etc/sudoers.d/volumio-user-raspdac-mini-lcd /usr/local/bin/rdmlcd-*.sh "$HELPER" "$LEAVING" /boot/overlays
   rm -f /boot/config.txt /boot/volumioconfig.txt "$USERCONFIG"
   mkdir -p "$PLUGIN/bin" "$ACTIVE" "$FAILING" "$GRAPHICS/fb0" "$GRAPHICS/fbcon" /boot /etc/systemd/system \
     /etc/udev/rules.d /etc/sudoers.d /usr/local/bin
@@ -169,6 +170,9 @@ installed() {
   grep -q "$HELPER framebuffer, $HELPER spi" "$SUDOERS" || fail "$1: the plugin may not set the boot configuration"
   [ -x "$HELPER" ] || fail "$1: the boot configuration's helper is not installed"
   [ "$(stat -c %U "$HELPER")" = root ] || fail "$1: the boot configuration's helper is not root's"
+  [ -x "$LEAVING" ] || fail "$1: the helper the service runs as it stops is not installed"
+  [ "$(stat -c %U "$LEAVING")" = root ] || fail "$1: the helper the service runs as it stops is not root's"
+  grep -q "^ExecStop=+$LEAVING \$MAINPID\$" "$UNIT" || fail "$1: the service does not run that helper as it stops"
   [ "$(stat -c %U "$PLUGIN/index.js")" = volumio ] || fail "$1: the plugin folder is not volumio's"
   [ -x "$PLUGIN/bin/raspdacmini-panel" ] || fail "$1: the display's program is not executable"
   grep -q "^systemctl daemon-reload" "$CALLS" || fail "$1: systemd was not asked to reload"
@@ -243,13 +247,43 @@ if "$HELPER" hdmi > /dev/null 2>&1; then fail "helper: took a driver there is no
 [ "$(cat "$USERCONFIG")" = "$expected" ] || fail "helper: a driver there is not changed the file"
 echo "ok: the helper turns the block from one driver to the other and back, and says when it changed"
 
+# --- The helper the service runs as it is stopped: it tells the display's
+# --- program which way the system is going down, and says nothing where
+# --- the service alone is stopped. --------------------------------------------
+printf '#!/bin/sh\ncat /tmp/jobs\n' > /tmp/systemctl-jobs
+chmod +x /tmp/systemctl-jobs
+sh -c 'trap "echo USR1 > /tmp/told" USR1; trap "echo USR2 > /tmp/told" USR2; while :; do sleep 0.05; done' &
+program=$!
+told() {
+  rm -f /tmp/told
+  printf '%s\n' "$1" > /tmp/jobs
+  RASPDACMINI_SYSTEMCTL=/tmp/systemctl-jobs "$LEAVING" "$program" || fail "leaving: the helper failed"
+  sleep 0.3
+  cat /tmp/told 2> /dev/null || echo nothing
+}
+[ "$(told '   812 reboot.target                start waiting
+   813 raspdacmini-panel.service    stop  running
+   814 systemd-reboot.service       start waiting')" = USR2 ] || fail "leaving: a restart was not told as one"
+[ "$(told '    90 poweroff.target start waiting')" = USR1 ] || fail "leaving: a power-off was not told as one"
+[ "$(told '    91 halt.target start waiting')" = USR1 ] || fail "leaving: a halt was not told as a power-off"
+[ "$(told '    92 kexec.target start waiting')" = USR2 ] || fail "leaving: a kexec was not told as a restart"
+[ "$(told '   813 raspdacmini-panel.service stop running')" = nothing ] || fail "leaving: a stop of the service alone was told as the system going down"
+[ "$(told '    95 reboot.target stop waiting')" = nothing ] || fail "leaving: a target being stopped was taken for one being started"
+[ "$(told '')" = nothing ] || fail "leaving: no jobs at all was told as something"
+printf '#!/bin/sh\nexit 1\n' > /tmp/systemctl-jobs
+[ "$(told '   812 reboot.target start waiting')" = nothing ] || fail "leaving: a systemd that does not answer was taken for an answer"
+"$LEAVING" "not a number" || fail "leaving: a PID that is none made the helper fail"
+"$LEAVING" || fail "leaving: no PID made the helper fail"
+kill "$program" 2> /dev/null || true
+echo "ok: the service's helper tells a restart from a power-off, and both from a stop of the service alone"
+
 # --- The uninstall takes back everything and leaves the rest. ----------------
 : > "$CALLS"
 out=$(sh "$PLUGIN/uninstall.sh")
 echo "$out" | grep -q "^pluginuninstallend$" || fail "uninstall: did not finish: $out"
 [ "$(cat "$USERCONFIG")" = 'dtoverlay=hifiberry-dac
 # mine' ] || fail "uninstall: the boot configuration is not as it was"
-for left in "$UNIT" "$RULES" "$SUDOERS" "$HELPER"; do
+for left in "$UNIT" "$RULES" "$SUDOERS" "$HELPER" "$LEAVING"; do
   [ ! -e "$left" ] || fail "uninstall: $left is still there"
 done
 grep -q "^systemctl disable raspdacmini-panel.service" "$CALLS" || fail "uninstall: the service was not disabled"

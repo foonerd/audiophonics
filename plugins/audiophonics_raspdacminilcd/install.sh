@@ -16,6 +16,7 @@ USERCONFIG="/boot/userconfig.txt"
 PLUGINS="/data/configuration/plugins.json"
 SETTINGS="/data/configuration/system_hardware/raspdac_mini_lcd/config.json"
 BOOT_HELPER="/usr/local/bin/raspdacmini-boot"
+LEAVING_HELPER="/usr/local/bin/raspdacmini-leaving"
 # The display's SPI device, and where the kernel lists its framebuffers. The
 # installer's own tests stand a file and a folder in for them.
 SPI_DEVICE="${RASPDACMINI_SPI_DEVICE:-/dev/spidev0.0}"
@@ -188,6 +189,9 @@ fi
 # plugin is on.
 # =============================================================================
 systemctl stop "$SERVICE.service" 2>/dev/null || true
+# What the service runs as it is stopped, to tell the display's program
+# when the stop is the whole system going down, and which way.
+install -m 755 "$PLUGIN_DIR/boot/raspdacmini-leaving" "$LEAVING_HELPER"
 install -m 644 "$PLUGIN_DIR/systemd/$SERVICE.service" "$UNIT"
 systemctl daemon-reload
 
