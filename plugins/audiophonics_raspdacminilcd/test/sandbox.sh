@@ -98,7 +98,7 @@ player() {
     /etc/udev/rules.d /etc/sudoers.d /usr/local/bin
   echo "BCM2708 FB" > "$GRAPHICS/fb0/name"
   cp -r /src/. "$PLUGIN/"
-  printf '#!/bin/sh\necho "raspdacmini-panel 1.99.0"\n' > "$PLUGIN/bin/raspdacmini-panel"
+  printf '#!/bin/sh\necho "raspdacmini-panel 2.0.0"\n' > "$PLUGIN/bin/raspdacmini-panel"
   printf 'dtparam=audio=on\n' > /boot/config.txt
   : > "$CALLS"
 }
