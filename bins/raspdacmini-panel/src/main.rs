@@ -109,10 +109,11 @@ const GREETING_HOLD: Duration = Duration::from_millis(1500);
 /// How often the DAC board's input and filter are read while the screen is
 /// up: they can be changed from elsewhere.
 const BOARD_EVERY: Duration = Duration::from_secs(3);
-/// How many polls in a row the player may miss before the mark takes the
-/// track's place: a player that is busy answers late for seconds on end,
-/// and one that has really gone is gone for longer than this.
-const PATIENCE: u32 = 12;
+/// How many polls in a row the player may be late with before the mark
+/// takes the track's place: about half a minute. A player that is busy
+/// answers late for ten seconds on end, and what it last said is still the
+/// truth. One that is not there at all is told at once: see the poll.
+const PATIENCE: u32 = 40;
 /// How long an answer is waited for while the player has given none yet:
 /// while it starts it is slow, and there is nothing else to do but wait.
 const FIRST_ANSWER: Duration = Duration::from_secs(2);
@@ -554,7 +555,18 @@ fn run(path: &str) -> Result<(), String> {
             } else {
                 waiting.state()
             };
-            match probe.observe(polled) {
+            // Nothing listening where the player should be is a player that
+            // has gone, and the mark says so at once; an answer that is
+            // only late leaves the screen as it is.
+            let report = match polled {
+                Err(audiophonics_player::Error::Transport(e))
+                    if e.kind() == std::io::ErrorKind::ConnectionRefused =>
+                {
+                    probe.gone(format!("transport: {e}"))
+                }
+                polled => probe.observe(polled),
+            };
+            match report {
                 Some(Report::Changed(line)) => info!("{line}"),
                 Some(Report::Outage(line)) => error!("{line}"),
                 None => {}

@@ -58,6 +58,19 @@ impl Probe {
         self.last.as_ref()
     }
 
+    /// The player is gone, and it is known without waiting to see whether
+    /// it answers the next poll: nothing listens where it should be.
+    pub fn gone(&mut self, why: impl std::fmt::Display) -> Option<Report> {
+        self.misses = self.tolerated;
+        self.last = None;
+        self.said = None;
+        if self.down {
+            return None;
+        }
+        self.down = true;
+        Some(Report::Outage(format!("player unreachable: {why}")))
+    }
+
     pub fn observe(&mut self, polled: Result<State>) -> Option<Report> {
         match polled {
             Ok(state) => {
@@ -196,6 +209,26 @@ mod tests {
             p.observe(Ok(playing(67)));
             assert!(p.state().is_some());
         }
+    }
+
+    #[test]
+    fn a_player_known_to_be_gone_is_gone_at_once_and_said_once() {
+        let mut p = Probe::tolerating(40);
+        p.observe(Ok(playing(67)));
+        assert_eq!(
+            p.gone("connection refused"),
+            Some(Report::Outage(
+                "player unreachable: connection refused".into()
+            ))
+        );
+        assert!(p.state().is_none());
+        assert_eq!(p.gone("connection refused"), None, "said once");
+        assert_eq!(p.observe(Err(Error::Decode("slow".into()))), None);
+        // Its return is news.
+        assert!(matches!(
+            p.observe(Ok(playing(67))),
+            Some(Report::Changed(_))
+        ));
     }
 
     #[test]
