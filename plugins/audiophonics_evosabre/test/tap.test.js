@@ -44,3 +44,10 @@ test('the tag is the one the display reads', () => {
     const program = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'bins', 'evosabre-panel', 'src', 'main.rs'), 'utf8');
     assert.ok(program.indexOf('const TAP_TAG: &str = "' + tap.TAG + '";') !== -1);
 });
+
+// Volumio reads contributions only from a plugin whose package.json says it
+// has one: without the word, the tap is written and never joins the chain.
+test('the plugin tells Volumio that it contributes to the audio path', () => {
+    const pkg = require('../package.json');
+    assert.equal(pkg.volumio_info.has_alsa_contribution, true);
+});

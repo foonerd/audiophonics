@@ -50,3 +50,10 @@ test('nothing of the tap is named as the EVO Sabre plugin names its own', () => 
     assert.notEqual(tap.OUT, other.OUT);
     assert.notEqual(tap.TAG, other.TAG);
 });
+
+// Volumio reads contributions only from a plugin whose package.json says it
+// has one: without the word, the tap is written and never joins the chain.
+test('the plugin tells Volumio that it contributes to the audio path', () => {
+    const pkg = require('../package.json');
+    assert.equal(pkg.volumio_info.has_alsa_contribution, true);
+});
