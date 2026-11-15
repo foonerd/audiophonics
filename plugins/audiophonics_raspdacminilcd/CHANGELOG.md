@@ -4,7 +4,7 @@ All notable changes to the RaspDacMini LCD plugin are recorded here. The format 
 
 ## [1.99.0] - 2026-11-14
 
-A build for the bench of what will be version 2: a rewrite. The display and the remote are now one small native program, in place of a Node application drawing through the kernel's framebuffer, a native add-on per Node version, lirc and irexec.
+A rewrite of version 1, on the bench before its release as version 2. The display and the remote are now one small native program, in place of a Node application drawing through the kernel's framebuffer, a native add-on per Node version, lirc and irexec.
 
 - **Nothing to rebuild, nothing installed beside the plugin.** The program is a single static binary. It does not depend on Volumio's Node version, and the plugin installs no package.
 - **The player's own screens show on the display.** Volumio's start-up and shutdown screens and the progress of a system update are drawn on it by the system, and the plugin draws once they are done; version 1 had masked them. The display's driver is now the kernel's own `fbtft` overlay, which a system update cannot take away, in place of an overlay file the plugin installed.
