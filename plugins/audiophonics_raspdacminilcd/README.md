@@ -71,9 +71,11 @@ Switch *Level meters* on and two meters stand on the first page, one a channel, 
 
 Where they stand has a cost. The display is sent whole rows, from the topmost that changed to the bottommost, and upright meters change nearly every row with every frame: that is more than can be sent fifty times a second. While upright meters move, the screen is drawn twenty-five times a second, and a track's line that runs moves two pixels at a time. Lying meters change only the rows above the track's line, and leave it at fifty and one pixel.
 
+Upright meters need the Raspberry Pi at its full speed. One whose power supply sags slows itself, and the display's bus with it, to less than half for as long as the sag lasts, and upright meters then move unevenly. `vcgencmd get_throttled` says whether that has happened: anything but `0x0` has a cause worth finding, and the first bit is the supply.
+
 *Meters: gain* adds up to twelve decibels to what the meters show, or takes as many away: up for music that leaves them low, down for music that keeps them at the top. It moves the meters only.
 
-The meters read evotap, a tap in the player's audio path. Every stream passes through it unchanged, PCM, DoP and native DSD alike, and it measures the stream ahead of the player's volume, so the meters show the music and not the volume it is played at. After the plugin is installed or updated the tap joins the audio path once the player has restarted; the plugin asks when that is needed. With the meters off, the tap is not in the path. There are no meters on the second page, nor while the DAC takes its S/PDIF input, which is not the player's stream.
+The meters read evotap, a tap in the player's audio path. Every stream passes through it unchanged, PCM, DoP and native DSD alike, and it measures the stream ahead of the player's volume, so the meters show the music and not the volume it is played at. After the plugin is installed or updated the tap joins the audio path once the player has restarted; the plugin asks when that is needed. With the meters off, the tap is not in the path. Switching the meters on or off has the player set its audio path up again, which stops what is playing. There are no meters on the second page, nor while the DAC takes its S/PDIF input, which is not the player's stream.
 
 To see what the meters read without the display, while something plays:
 
