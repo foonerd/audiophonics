@@ -109,14 +109,16 @@ const GREETING_HOLD: Duration = Duration::from_millis(1500);
 /// How often the DAC board's input and filter are read while the screen is
 /// up: they can be changed from elsewhere.
 const BOARD_EVERY: Duration = Duration::from_secs(3);
-/// How many polls in a row the player may be late with before the mark
-/// takes the track's place: about half a minute. A player that is busy
-/// answers late for ten seconds on end, and what it last said is still the
-/// truth. One that is not there at all is told at once: see the poll.
-const PATIENCE: u32 = 40;
-/// How long an answer is waited for while the player has given none yet:
-/// while it starts it is slow, and there is nothing else to do but wait.
-const FIRST_ANSWER: Duration = Duration::from_secs(2);
+/// How many polls in a row the player may fail to answer before the mark
+/// takes the track's place: with the longer wait a late player is given,
+/// about half a minute. What a busy player last said is still the truth.
+/// One that is not there at all is told at once: see the poll.
+const PATIENCE: u32 = 12;
+/// How long an answer is waited for from a player that has given none yet,
+/// or that was late with its last: a player that is starting, or busy,
+/// takes a second or more to say what it would otherwise say at once, and
+/// asking it again sooner only gets no answer again.
+const SLOW_ANSWER: Duration = Duration::from_secs(2);
 /// How often it is asked whether the system's splash has the screen.
 const SPLASH_EVERY: Duration = Duration::from_millis(500);
 
@@ -407,7 +409,8 @@ fn run(path: &str) -> Result<(), String> {
     let mut keys = Keys::default();
 
     let mut volumio = Volumio::new(cfg.player_base.clone(), cfg.request_timeout);
-    let mut waiting = Volumio::new(cfg.player_base.clone(), FIRST_ANSWER);
+    let mut waiting = Volumio::new(cfg.player_base.clone(), SLOW_ANSWER);
+    let mut late = false;
     let mut probe = Probe::tolerating(PATIENCE);
     let covers = {
         let tx = tx.clone();
@@ -453,7 +456,7 @@ fn run(path: &str) -> Result<(), String> {
             }
             idle.retime(Duration::ZERO, new.sleep_after);
             volumio = Volumio::new(new.player_base.clone(), new.request_timeout);
-            waiting = Volumio::new(new.player_base.clone(), FIRST_ANSWER);
+            waiting = Volumio::new(new.player_base.clone(), SLOW_ANSWER);
             if new.remote {
                 remote.look_now(Instant::now());
                 status.receiver(remote.line());
@@ -550,11 +553,12 @@ fn run(path: &str) -> Result<(), String> {
             status.receiver(remote.line());
         }
         if now >= next_poll {
-            let polled = if probe.state().is_some() {
+            let polled = if probe.state().is_some() && !late {
                 volumio.state()
             } else {
                 waiting.state()
             };
+            late = polled.is_err();
             // Nothing listening where the player should be is a player that
             // has gone, and the mark says so at once; an answer that is
             // only late leaves the screen as it is.
