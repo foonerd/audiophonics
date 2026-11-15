@@ -34,6 +34,7 @@ mod config;
 mod cover;
 mod dac;
 mod fbdev;
+mod gauge;
 mod handover;
 mod icons;
 mod ili9341;
@@ -51,6 +52,7 @@ use audiophonics_base::clock::Clock;
 use audiophonics_base::idle::{Idle, Level, Playing};
 use audiophonics_base::leaving::{self, Leaving};
 use audiophonics_base::{board, debug, error, info, log, net};
+use audiophonics_meters::{levels, Meters};
 use audiophonics_player::probe::{Probe, Report};
 use audiophonics_player::{Player, Volumio};
 use audiophonics_remote::watch::{self, Watch};
@@ -78,11 +80,15 @@ const NAME: &str = "raspdacmini-panel";
 /// The name the plugin answers to at the player, for what only the player
 /// can do.
 const PLUGIN: &str = "raspdac_mini_lcd";
+/// The tag the plugin's ALSA contribution gives its tap, and so the one in
+/// the names of the rings the meters read.
+const TAP_TAG: &str = "raspdacmini";
 
 const USAGE: &str = "\
 usage: raspdacmini-panel [--config FILE]
        raspdacmini-panel --render DIR [--assets DIR]
        raspdacmini-panel --cover ADDRESS [--player URL]
+       raspdacmini-panel --levels
        raspdacmini-panel --version
 
   --config FILE    the plugin's settings, as Volumio's configuration store
@@ -94,6 +100,8 @@ usage: raspdacmini-panel [--config FILE]
                    the background it makes to standard output: what the
                    panel runs for each cover, so that no cover can stop it
   --player URL     with --cover: where the player is
+  --levels         say for ten seconds what the level meters read from the
+                   tap in the player's audio path, and leave
   --version        say which build this is";
 
 /// A frame of whatever moves: a line that runs, a page that slides. A line
@@ -138,6 +146,7 @@ enum Command {
     Run { config: String },
     Render { dir: String, assets: String },
     Cover { albumart: String, player: String },
+    Levels,
     Version,
     Help,
 }
@@ -159,6 +168,7 @@ fn parse(args: &[String]) -> Result<Command, String> {
         match arg.as_str() {
             "--version" | "-V" => return Ok(Command::Version),
             "--help" | "-h" => return Ok(Command::Help),
+            "--levels" => return Ok(Command::Levels),
             "--config" => config = value("a file")?,
             "--render" => render = Some(value("a directory")?),
             "--assets" => assets = Some(value("a directory")?),
@@ -202,6 +212,7 @@ fn main() -> ExitCode {
                 }
             }),
         Ok(Command::Cover { albumart, player }) => cover::helper(&player, &albumart),
+        Ok(Command::Levels) => audiophonics_meters::say(TAP_TAG),
         Ok(Command::Run { config }) => run(&config),
         Err(e) => {
             eprintln!("{NAME}: {e}\n{USAGE}");
@@ -406,6 +417,12 @@ fn run(path: &str) -> Result<(), String> {
     let started = Instant::now();
     // What moves is drawn on an even beat: see `beat`.
     let beat = Beat::new(started, FRAME);
+    // Meters that stand upright change nearly every row of the glass with
+    // every frame, which takes longer to send to the panel than a frame
+    // lasts. While they move, frames are drawn on every second beat.
+    let slow = Beat::new(started, FRAME * 2);
+    let mut source = levels::Source::new(TAP_TAG);
+    let mut needles = Meters::default();
 
     let (tx, rx) = mpsc::channel::<Msg>();
     let mut status = Status::new();
@@ -609,6 +626,8 @@ fn run(path: &str) -> Result<(), String> {
             }
         }
 
+        let mut pace = beat;
+        let mut metering = false;
         if yielded {
             // Not this program's to draw on for now.
         } else if idle.level(now) == Level::Blank {
@@ -659,18 +678,44 @@ fn run(path: &str) -> Result<(), String> {
                             queue_of = Some(track);
                         }
                     }
+                    // The meters, where they are on and the first page is
+                    // up: moved on by what the tap heard since the last
+                    // frame.
+                    let first_page = dac_board.other_input().is_none()
+                        && (pages.on() == Page::First || pages.sliding(now));
+                    let meters = cfg.meters.filter(|_| first_page).map(|place| {
+                        let gain = f32::from(cfg.meters_gain);
+                        let heard = source.take(now).map(|level| level.gained(gain));
+                        needles.feed(heard, now);
+                        match source.changed() {
+                            Some(true) => info!(
+                                "meters: reading {}",
+                                source
+                                    .path()
+                                    .map_or_else(String::new, |p| p.display().to_string())
+                            ),
+                            Some(false) => info!("meters: no stream to read"),
+                            None => {}
+                        }
+                        (place, needles.bars())
+                    });
+                    metering = meters.is_some() && (state.is_playing() || !needles.at_rest());
+                    if metering && meters.is_some_and(|(place, _)| place.upright()) {
+                        pace = slow;
+                    }
                     let what = Shown {
                         state: &state,
                         address: &ip,
                         clock: &time,
                         filter: &dac_board.filter,
                         queue,
+                        meters,
                     };
                     let backdrop: &[Rgb] = shelf.backdrop().unwrap_or(&no_cover);
                     let mut canvas = Canvas::new();
                     // The frame is drawn for the beat it falls on, not for
                     // the moment the loop came round to it.
-                    let at = beat.nearest(Instant::now());
+                    let at = pace.nearest(Instant::now());
                     if let Some(name) = dac_board.other_input() {
                         pages.reset();
                         screens::input(&mut canvas, name, &what, &mut faces);
@@ -707,8 +752,8 @@ fn run(path: &str) -> Result<(), String> {
         }
         if !asleep && !yielded {
             let player_up = probe.state().is_some();
-            if player_up && (pages.sliding(now) || screens.moving()) {
-                wake = wake.min(beat.after(now));
+            if player_up && (pages.sliding(now) || screens.moving() || metering) {
+                wake = wake.min(pace.after(now));
             }
             wake = wake.min(dac_board.look_at);
             if let Some(at) = shelf.retry_at() {
@@ -856,6 +901,7 @@ mod tests {
     fn the_other_things_it_can_be_asked_are_told_apart() {
         assert_eq!(parse(&args(&["--version"])), Ok(Command::Version));
         assert_eq!(parse(&args(&["--help"])), Ok(Command::Help));
+        assert_eq!(parse(&args(&["--levels"])), Ok(Command::Levels));
         assert_eq!(
             parse(&args(&["--render", "out", "--assets", "a"])),
             Ok(Command::Render {

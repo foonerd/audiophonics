@@ -89,3 +89,28 @@ test('the page, the store and the checks agree on every setting', () => {
         assert.deepEqual(saved, held, section.id + ': the save sends every control of its section');
     }
 });
+
+test('the meters\' settings are taken as the display reads them', () => {
+    const keys = ['meters', 'meters_style', 'meters_gain'];
+    assert.deepEqual(
+        form.take({ meters: true, meters_style: { value: 'horizontal', label: 'Over the track, lying' }, meters_gain: '-6' }, keys),
+        { values: { meters: true, meters_style: 'horizontal', meters_gain: -6 } });
+    for (const style of ['vertical_right', 'vertical_left', 'horizontal']) {
+        assert.deepEqual(form.take({ meters_style: style }, keys), { values: { meters_style: style } });
+    }
+    assert.deepEqual(form.take({ meters_style: 'diagonal' }, keys), { values: {} }, 'a place that is none is not stored');
+    for (const gain of [-13, 13, '0.5', '']) {
+        assert.deepEqual(form.take({ meters_gain: gain }, keys), { bad: { key: 'meters_gain', min: -12, max: 12 } }, String(gain));
+    }
+    // The page offers the places the form takes, and the range it checks.
+    const display = uiconf.sections.filter((s) => s.id === 'section_display')[0];
+    const style = display.content.filter((e) => e.id === 'meters_style')[0];
+    assert.deepEqual(style.options.map((o) => o.value), ['vertical_right', 'vertical_left', 'horizontal']);
+    const gain = display.content.filter((e) => e.id === 'meters_gain')[0];
+    assert.deepEqual([gain.attributes[0].min, gain.attributes[1].max], form.NUMBERS.meters_gain);
+    // Off, at the right, with no gain, until the user says otherwise.
+    assert.equal(defaults.meters.value, false);
+    assert.equal(defaults.meters_style.value, 'vertical_right');
+    assert.equal(defaults.meters_gain.value, 0);
+    assert.deepEqual(display.saveButton.data.slice(-3), keys);
+});

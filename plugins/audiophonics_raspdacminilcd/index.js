@@ -2,10 +2,11 @@
 
 // The Volumio side of the RaspDac Mini's display: the settings page, the
 // display's service, the word to the display that the player is going
-// down, and the one thing the display has to ask the player for through
-// its plugin, a shutdown. The program the service runs
-// (bin/raspdacmini-panel) draws the glass, reads the remote and sets the
-// DAC; this file touches none of them.
+// down, the tap in the player's audio path that the level meters read, and
+// the one thing the display has to ask the player for through its plugin,
+// a shutdown. The program the service runs (bin/raspdacmini-panel) draws
+// the glass, reads the remote and sets the DAC; this file touches none of
+// them.
 
 var libQ = require('kew');
 var fs = require('fs-extra');
@@ -13,6 +14,8 @@ var path = require('path');
 var exec = require('child_process').exec;
 var remote = require('./lib/remote');
 var form = require('./lib/form');
+var tap = require('./lib/tap');
+var volume = require('./lib/volume');
 
 var SERVICE = 'raspdacmini-panel.service';
 var REMOTE_STATUS = '/run/raspdacmini-panel/remote.json';
@@ -23,6 +26,16 @@ var PANEL_FB = 'fb_ili9341';
 var RC_DEVICES = '/sys/class/rc';
 var BOOT_HELPER = '/usr/local/bin/raspdacmini-boot';
 var BOOT_MARK = '# >>> raspdac_mini_lcd';
+// Where Volumio looks for what a plugin adds to the player's ALSA
+// configuration, and the configuration it writes from all of them.
+var ASOUND_DIR = path.join(__dirname, 'asound');
+var ASOUND_FILE = '/etc/asound.conf';
+// The quiet left after Volumio's restore of the mixer before the volume is
+// asked for again, and before a mute follows the volume.
+var VOLUME_AFTER = 1500;
+var MUTE_AFTER = 1000;
+// How long after a rebuild the configuration is looked at for the tap.
+var CHAIN_AFTER = 5000;
 // The name the display's program calls this plugin by at the player.
 var ENDPOINT = { endpoint: 'raspdac_mini_lcd', type: 'system_hardware', name: 'raspdac_mini_lcd', method: 'panelAsks' };
 var id = 'raspdac_mini_lcd: ';
@@ -35,6 +48,8 @@ function RaspDacMini(context) {
     this.logger = context.logger;
     this.configManager = context.configManager;
     this.reloadTimer = null;
+    this.chainTimer = null;
+    this.pathTimers = [];
 }
 
 RaspDacMini.prototype.onVolumioStart = function () {
@@ -57,6 +72,7 @@ RaspDacMini.prototype.onStart = function () {
     // cannot come up is said on the page, and the settings stay reachable.
     return self.applyService().then(function () {
         self.askRestartIfNeeded();
+        return self.applyAudioPath();
     });
 };
 
@@ -64,7 +80,9 @@ RaspDacMini.prototype.onStop = function () {
     var self = this;
     if (self.reloadTimer) { clearTimeout(self.reloadTimer); self.reloadTimer = null; }
     self.commandRouter.removePluginRestEndpoint(ENDPOINT);
-    return self.systemctl('disable --now').fail(function () { /* said in the log */ });
+    return self.systemctl('disable --now')
+        .fail(function () { /* said in the log */ })
+        .then(function () { return self.leaveAudioPath(); });
 };
 
 RaspDacMini.prototype.onRestart = function () { };
@@ -243,6 +261,148 @@ RaspDacMini.prototype.askRestartIfNeeded = function () {
 };
 
 // -----------------------------------------------------------------------------
+// The level meters: a tap in the player's audio path.
+// -----------------------------------------------------------------------------
+
+// Volumio's ALSA configuration, written again from every plugin's
+// contribution. Resolves with whether Volumio wrote a new file, which is
+// when it has ALSA restore its stored mixer state; resolves whatever
+// becomes of it, and the page says the rest.
+RaspDacMini.prototype.rebuildAlsa = function () {
+    var self = this;
+    var defer = libQ.defer();
+    var done = false;
+    var finish = function (result) {
+        if (done) { return; }
+        done = true;
+        defer.resolve(Boolean(result && result.changed));
+    };
+    var asked;
+    try {
+        asked = self.commandRouter.executeOnPlugin('audio_interface', 'alsa_controller', 'updateALSAConfigFile');
+    } catch (e) {
+        self.logger.error(id + 'updateALSAConfigFile: ' + e);
+        finish();
+        return defer.promise;
+    }
+    if (asked && typeof asked.then === 'function') {
+        asked.then(finish).fail(function () { finish(); });
+    } else {
+        finish();
+    }
+    return defer.promise;
+};
+
+// The volume and the mute the player has now, or nothing where it has no
+// volume of its own.
+RaspDacMini.prototype.volumeNow = function () {
+    try {
+        return volume.held(this.commandRouter.volumioGetState());
+    } catch (e) {
+        return null;
+    }
+};
+
+// Whatever is still due from an earlier change of the audio path is
+// dropped: a later change has its own.
+RaspDacMini.prototype.cancelPath = function () {
+    (this.pathTimers || []).forEach(function (timer) { clearTimeout(timer); });
+    this.pathTimers = [];
+    if (this.chainTimer) { clearTimeout(this.chainTimer); this.chainTimer = null; }
+};
+
+// The volume the player had, asked for again after a rebuild that changed
+// the configuration: Volumio has ALSA restore the mixer then, and what it
+// restores is rarely what the player had. The mute follows the volume.
+RaspDacMini.prototype.putVolumeBack = function (changed, was) {
+    var self = this;
+    if (!changed) { return; }
+    volume.steps(was).forEach(function (value, i) {
+        self.pathTimers.push(setTimeout(function () {
+            try {
+                self.commandRouter.volumiosetvolume(value);
+            } catch (e) {
+                self.logger.error(id + 'volume: ' + e);
+            }
+        }, VOLUME_AFTER + i * MUTE_AFTER));
+    });
+};
+
+// The tap's contribution as it should stand: written, or gone. Returns
+// whether that changed what is there.
+RaspDacMini.prototype.contribute = function (wanted) {
+    var file = path.join(ASOUND_DIR, tap.CONTRIBUTION);
+    var there = fs.existsSync(file);
+    if (!wanted) {
+        if (there) { fs.unlinkSync(file); }
+        return there;
+    }
+    var text = tap.contribution(__dirname);
+    if (there && fs.readFileSync(file, 'utf8') === text) { return false; }
+    fs.ensureDirSync(ASOUND_DIR);
+    fs.writeFileSync(file, text, 'utf8');
+    return true;
+};
+
+// The audio path as the settings stand: the tap in it while the meters are
+// on, and out of it while they are off. The player's configuration is
+// rebuilt only when that changes something.
+RaspDacMini.prototype.applyAudioPath = function () {
+    var self = this;
+    var wanted = form.isOn(self.config.get('meters'), false);
+    var was = self.volumeNow();
+    self.cancelPath();
+    var changed;
+    try {
+        changed = self.contribute(wanted);
+    } catch (e) {
+        self.commandRouter.pushToastMessage('error', self.commandRouter.getI18nString('RASPDACMINI.PLUGIN_NAME'),
+            self.commandRouter.getI18nString('RASPDACMINI.PATH_FAILED').replace('{{error}}', e.message));
+        return libQ.resolve();
+    }
+    if (!changed) {
+        if (wanted) { self.checkChain(); }
+        return libQ.resolve();
+    }
+    return self.rebuildAlsa().then(function (rewritten) {
+        self.putVolumeBack(rewritten, was);
+        if (wanted) { self.checkChain(); }
+    });
+};
+
+// Out of the audio path, as the plugin stops.
+RaspDacMini.prototype.leaveAudioPath = function () {
+    var self = this;
+    var was = self.volumeNow();
+    self.cancelPath();
+    var had = false;
+    try {
+        had = self.contribute(false);
+    } catch (e) {
+        self.logger.error(id + 'audio path: ' + e.message);
+    }
+    if (!had) { return libQ.resolve(); }
+    return self.rebuildAlsa().then(function (rewritten) {
+        self.putVolumeBack(rewritten, was);
+    });
+};
+
+// Volumio asks for contributions only from the plugins it knew when it
+// started: one installed since joins the chain after a restart. Looked at a
+// moment after the rebuild, and asked for once.
+RaspDacMini.prototype.checkChain = function () {
+    var self = this;
+    if (self.chainTimer) { clearTimeout(self.chainTimer); }
+    self.chainTimer = setTimeout(function () {
+        self.chainTimer = null;
+        var asound = '';
+        try { asound = fs.readFileSync(ASOUND_FILE, 'utf8'); } catch (e) { /* not written yet */ }
+        if (tap.inChain(asound)) { return; }
+        self.askRestart('RASPDACMINI.PATH_RESTART_MSG');
+    }, CHAIN_AFTER);
+};
+
+// -----------------------------------------------------------------------------
 // The settings page.
 // -----------------------------------------------------------------------------
 
@@ -294,8 +454,14 @@ RaspDacMini.prototype.saveDisplay = function (data) {
     var self = this;
     var was = form.isOn(self.config.get('lcd_active'), true);
     var driven = form.driver(self.config.get('display_driver'));
-    if (!self.save(data, ['lcd_active', 'display_driver', 'boot_splash', 'sleep_after'])) {
+    var metered = form.isOn(self.config.get('meters'), false);
+    if (!self.save(data, ['lcd_active', 'display_driver', 'boot_splash', 'sleep_after', 'meters', 'meters_style', 'meters_gain'])) {
         return libQ.resolve();
+    }
+    if (form.isOn(self.config.get('meters'), false) !== metered) {
+        // The meters read a tap in the player's audio path: in with them,
+        // out without.
+        self.applyAudioPath();
     }
     if (form.driver(self.config.get('display_driver')) !== driven) {
         // The way the display is driven is in the boot configuration: the

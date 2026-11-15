@@ -144,6 +144,61 @@ impl Meters {
     }
 }
 
+/// How often the ring is looked at while its levels are said.
+const SAY_EVERY: Duration = Duration::from_millis(40);
+
+/// What the meters would show for the tap tagged `tag`, said on standard
+/// output four times a second for ten seconds: the tap's ring as a display
+/// reads it, for a look without the glass.
+pub fn say(tag: &str) -> Result<(), String> {
+    let mut source = levels::Source::new(tag);
+    let mut needles = Meters::default();
+    let started = Instant::now();
+    let mut said = started;
+    let mut heard_any = false;
+    while started.elapsed() < Duration::from_secs(10) {
+        let now = Instant::now();
+        let heard = source.take(now);
+        heard_any |= heard.is_some();
+        needles.feed(heard, now);
+        match source.changed() {
+            Some(true) => println!(
+                "reading {}",
+                source
+                    .path()
+                    .map_or_else(String::new, |p| p.display().to_string())
+            ),
+            Some(false) => println!("no stream to read"),
+            None => {}
+        }
+        if now.saturating_duration_since(said) >= Duration::from_millis(250) {
+            said = now;
+            let [left, right] = needles.bars();
+            let db = |place: f32| FLOOR_DB * (1.0 - place);
+            println!(
+                "left level {:6.1} dB peak {:6.1} dB hold {:6.1} dB   right level {:6.1} dB peak {:6.1} dB hold {:6.1} dB",
+                db(left.level),
+                db(left.peak),
+                db(left.hold),
+                db(right.level),
+                db(right.peak),
+                db(right.hold)
+            );
+        }
+        std::thread::sleep(SAY_EVERY);
+    }
+    if heard_any {
+        Ok(())
+    } else {
+        Err(format!(
+            "nothing was published under {} for the tag {} in ten seconds: \
+             nothing is playing, or the tap is not in the player's audio path",
+            levels::DIR,
+            tag
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

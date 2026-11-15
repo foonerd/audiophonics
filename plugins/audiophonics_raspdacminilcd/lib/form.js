@@ -5,10 +5,15 @@
 
 // The whole numbers the page takes, each with the range the display accepts.
 const NUMBERS = {
-    sleep_after: [0, 3600]
+    sleep_after: [0, 3600],
+    meters_gain: [-12, 12]
 };
-const SWITCHES = ['lcd_active', 'boot_splash', 'remote_active'];
-const SELECTS = { display_driver: ['framebuffer', 'spi'], log_level: ['error', 'info', 'debug'] };
+const SWITCHES = ['lcd_active', 'boot_splash', 'meters', 'remote_active'];
+const SELECTS = {
+    display_driver: ['framebuffer', 'spi'],
+    meters_style: ['vertical_right', 'vertical_left', 'horizontal'],
+    log_level: ['error', 'info', 'debug']
+};
 
 // A switch as the store may hold it: a boolean, or its text.
 function isOn(value, fallback) {

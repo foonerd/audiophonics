@@ -9,6 +9,8 @@ description = "The RaspDac Mini's display and its remote: a 320x240 ILI9341 LCD 
 
 [dependencies]
 audiophonics-base = { path = "../../crates/base" }
+# The meters: the tap's levels and a meter's movement.
+audiophonics-meters = { path = "../../crates/meters" }
 audiophonics-player = { path = "../../crates/player" }
 audiophonics-remote = { path = "../../crates/remote" }
 audiophonics-unifont = { path = "../../crates/unifont" }

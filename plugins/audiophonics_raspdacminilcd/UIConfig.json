@@ -20,7 +20,10 @@
                     "lcd_active",
                     "display_driver",
                     "boot_splash",
-                    "sleep_after"
+                    "sleep_after",
+                    "meters",
+                    "meters_style",
+                    "meters_gain"
                 ]
             },
             "content": [
@@ -71,6 +74,64 @@
                         },
                         {
                             "max": 3600
+                        },
+                        {
+                            "step": 1
+                        }
+                    ]
+                },
+                {
+                    "id": "meters",
+                    "element": "switch",
+                    "label": "TRANSLATE.RASPDACMINI.METERS",
+                    "doc": "TRANSLATE.RASPDACMINI.METERS_DOC",
+                    "value": false
+                },
+                {
+                    "id": "meters_style",
+                    "element": "select",
+                    "label": "TRANSLATE.RASPDACMINI.METERS_STYLE",
+                    "doc": "TRANSLATE.RASPDACMINI.METERS_STYLE_DOC",
+                    "value": {
+                        "value": "vertical_right",
+                        "label": "TRANSLATE.RASPDACMINI.METERS_VERTICAL_RIGHT"
+                    },
+                    "visibleIf": {
+                        "field": "meters",
+                        "value": true
+                    },
+                    "options": [
+                        {
+                            "value": "vertical_right",
+                            "label": "TRANSLATE.RASPDACMINI.METERS_VERTICAL_RIGHT"
+                        },
+                        {
+                            "value": "vertical_left",
+                            "label": "TRANSLATE.RASPDACMINI.METERS_VERTICAL_LEFT"
+                        },
+                        {
+                            "value": "horizontal",
+                            "label": "TRANSLATE.RASPDACMINI.METERS_HORIZONTAL"
+                        }
+                    ]
+                },
+                {
+                    "id": "meters_gain",
+                    "element": "input",
+                    "type": "number",
+                    "label": "TRANSLATE.RASPDACMINI.METERS_GAIN",
+                    "doc": "TRANSLATE.RASPDACMINI.METERS_GAIN_DOC",
+                    "value": 0,
+                    "visibleIf": {
+                        "field": "meters",
+                        "value": true
+                    },
+                    "attributes": [
+                        {
+                            "min": -12
+                        },
+                        {
+                            "max": 12
                         },
                         {
                             "step": 1

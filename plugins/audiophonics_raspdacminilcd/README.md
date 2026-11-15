@@ -12,6 +12,8 @@ Text in any script is drawn: DejaVu Sans has Latin, Greek, Cyrillic and many mor
 
 While the DAC takes its other input the screen says which, in large letters. While nothing plays and no key is pressed the screen goes black after a time you choose. The plugin shows the Audiophonics mark while the player's software starts, and says so when it shuts down or restarts.
 
+**Level meters**, when they are switched on, stand on the first page: one a channel, upright beside the cover or lying over the track's line. See *Level meters* below.
+
 **The player's own screens.** The display is the system's from the first moments of a start: Volumio's start-up and shutdown screens show on it, and so does the progress of a system update, so the unit never looks dead while it is busy. The plugin draws once those are done. This is the *System framebuffer* display driver; see [Display driver](#display-driver) for the other.
 
 **The remote.** The streamer acts on every key:
@@ -50,6 +52,9 @@ Installing over version 1 of the plugin replaces it, keeps your settings and sta
 | Display driver | *System framebuffer*, or *Direct*. A change takes effect when the player has restarted. |
 | Mark at start and at shutdown | The Audiophonics mark with a word under it while the player's software starts, shuts down or restarts. Off leaves the screen black at those times. |
 | Black after | Seconds after the last key on the remote, while nothing plays, before the screen goes black. 0 never goes black. |
+| Level meters | Two meters on the first page, one a channel. Off unless you switch them on. |
+| Meters: where they stand | Upright at the right of the cover, upright at the left, or lying over the track's line. |
+| Meters: gain (dB) | Decibels added to what the meters show, -12 to 12. What is played is not touched. |
 | Obey the remote | Off leaves every key without effect. |
 | Check the remote | Says whether the receiver is being read and which key arrived last. |
 | Detail | How much the display's program writes to the journal. |
@@ -57,6 +62,22 @@ Installing over version 1 of the plugin replaces it, keeps your settings and sta
 Settings take effect when saved.
 
 The display has no line to switch its light off, so a black screen still glows a little.
+
+## Level meters
+
+Switch *Level meters* on and two meters stand on the first page, one a channel, on a scale of sixty decibels. The bright part of a meter is the level, averaged as a VU meter averages; the dimmer part reaches to the peak; a mark holds the highest peak for a moment before it falls. The scale's marks stand at full scale and at 3, 6, 10, 20, 30, 40, 50 and 60 decibels under it, and five of them are named.
+
+*Meters: where they stand* places them. Upright, they stand in a strip beside the cover, at the right or at the left, the left channel first and the scale running from the bottom up. Lying, they are in a strip over the track's line, the left channel above the right and the scale running from left to right.
+
+Where they stand has a cost. The display is sent whole rows, from the topmost that changed to the bottommost, and upright meters change nearly every row with every frame: that is more than can be sent fifty times a second. While upright meters move, the screen is drawn twenty-five times a second, and a track's line that runs moves two pixels at a time. Lying meters change only the rows above the track's line, and leave it at fifty and one pixel.
+
+*Meters: gain* adds up to twelve decibels to what the meters show, or takes as many away: up for music that leaves them low, down for music that keeps them at the top. It moves the meters only.
+
+The meters read evotap, a tap in the player's audio path. Every stream passes through it unchanged, PCM, DoP and native DSD alike, and it measures the stream ahead of the player's volume, so the meters show the music and not the volume it is played at. After the plugin is installed or updated the tap joins the audio path once the player has restarted; the plugin asks when that is needed. With the meters off, the tap is not in the path. There are no meters on the second page, nor while the DAC takes its S/PDIF input, which is not the player's stream.
+
+To see what the meters read without the display, while something plays:
+
+    /data/plugins/system_hardware/raspdac_mini_lcd/bin/raspdacmini-panel --levels
 
 ## Display driver
 
@@ -81,6 +102,8 @@ The display's driver is the kernel's own `fbtft` overlay, which comes with the s
 Installing also removes what version 1 installed: its five services, its helper scripts, its sudoers entry, its display overlay and its lines in the boot configuration; and it gives back the system's lirc services and boot splash, which version 1 had masked. The packages version 1 installed are left in place.
 
 Covers are fetched with the player's own `curl`.
+
+In the player's audio path the plugin puts only what its settings ask for: the tap for the level meters, while they are on.
 
 ## Troubleshooting
 
@@ -110,4 +133,4 @@ The plugin is free and open source, maintained by one developer in his own time.
 
 ## Licence
 
-MIT. Two things shipped with the plugin are separate works under their own licences: DejaVu Sans, as `assets/DejaVuSans.ttf` (see `assets/DEJAVU.txt`), and GNU Unifont, as `assets/unifont.hex` (see `assets/UNIFONT.txt`).
+MIT. Three things shipped with the plugin are separate works under their own licences: DejaVu Sans, as `assets/DejaVuSans.ttf` (see `assets/DEJAVU.txt`); GNU Unifont, as `assets/unifont.hex` (see `assets/UNIFONT.txt`); and evotap, the tap the level meters read, under the MIT licence (see `evotap/NOTICE.txt`).

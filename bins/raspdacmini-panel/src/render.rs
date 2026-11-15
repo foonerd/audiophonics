@@ -4,9 +4,11 @@
 
 use crate::art;
 use crate::canvas::{rgb888, Canvas, Frame, HEIGHT, WIDTH};
+use crate::config::Place;
 use crate::mark::Mark;
 use crate::screens::{self, Screens, Shown};
 use crate::text::Faces;
+use audiophonics_meters::{self as meters, Bar};
 use audiophonics_player::State;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -39,6 +41,7 @@ fn show(state: &State) -> Shown<'_> {
         clock: CLOCK,
         filter: "brick wall",
         queue: Some(9),
+        meters: None,
     }
 }
 
@@ -149,6 +152,36 @@ pub fn all(dir: &Path, assets: &Path) -> Result<Vec<PathBuf>, String> {
         shots.push((name, canvas));
     }
 
+    // The level meters, where each can stand: the left channel a little
+    // louder than the right, each with its peak and the mark that holds.
+    let bars = [
+        Bar {
+            level: meters::place(-14.0),
+            peak: meters::place(-6.0),
+            hold: meters::place(-2.5),
+        },
+        Bar {
+            level: meters::place(-19.0),
+            peak: meters::place(-11.0),
+            hold: meters::place(-8.0),
+        },
+    ];
+    for (name, place) in [
+        ("meters-right", Place::Right),
+        ("meters-left", Place::Left),
+        ("meters-lying", Place::Over),
+    ] {
+        let state = playing();
+        let shown = Shown {
+            meters: Some((place, bars)),
+            ..show(&state)
+        };
+        let mut screens = Screens::new(t0);
+        let mut canvas = Canvas::new();
+        screens.playing(&mut canvas, &square, &shown, &mut faces, t0);
+        shots.push((name, canvas));
+    }
+
     // The second page, and the first on its way to it.
     let mut screens = Screens::new(t0);
     let state = playing();
@@ -189,7 +222,7 @@ mod tests {
     fn every_screen_is_written_as_a_panel_sized_image() {
         let dir = std::env::temp_dir().join(format!("raspdacmini-render-{}", std::process::id()));
         let files = all(&dir, &assets()).unwrap();
-        assert_eq!(files.len(), 16);
+        assert_eq!(files.len(), 19);
         for file in &files {
             let bytes = std::fs::read(file).unwrap();
             assert!(
@@ -211,7 +244,7 @@ mod tests {
     fn the_screens_are_drawn_without_any_asset_at_all() {
         let dir = std::env::temp_dir().join(format!("raspdacmini-bare-{}", std::process::id()));
         let files = all(&dir, Path::new("/nonexistent")).unwrap();
-        assert_eq!(files.len(), 16);
+        assert_eq!(files.len(), 19);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

@@ -40,6 +40,35 @@ impl Driver {
     }
 }
 
+/// Where the level meters stand when they are on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Place {
+    /// Upright, at the right of the cover.
+    Right,
+    /// Upright, at the left of the cover.
+    Left,
+    /// Lying, over the track's line.
+    Over,
+}
+
+impl Place {
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.trim() {
+            "vertical_right" => Some(Self::Right),
+            "vertical_left" => Some(Self::Left),
+            "horizontal" => Some(Self::Over),
+            _ => None,
+        }
+    }
+
+    /// True for meters that stand upright beside the cover. They change
+    /// nearly every row of the glass with every frame, which is more than
+    /// can be sent to the panel fifty times a second.
+    pub fn upright(self) -> bool {
+        matches!(self, Self::Right | Self::Left)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Config {
     pub player_base: String,
@@ -63,6 +92,11 @@ pub struct Config {
     /// The screen goes black after this long while nothing plays and
     /// nothing is touched. Zero keeps it up for ever.
     pub sleep_after: Duration,
+
+    /// The level meters: off, or where they stand on the first page.
+    pub meters: Option<Place>,
+    /// Decibels added to what the meters show, -12 to 12.
+    pub meters_gain: i8,
 
     /// Whether the handset is obeyed.
     pub remote: bool,
@@ -93,6 +127,9 @@ impl Default for Config {
             restart_text: "Restarting".into(),
 
             sleep_after: Duration::from_secs(900),
+
+            meters: None,
+            meters_gain: 0,
 
             remote: true,
             log_level: Level::Error,
@@ -132,6 +169,9 @@ pub fn from_store(store: &Store) -> (Config, Vec<String>) {
     if let Some(v) = number("sleep_after", 0, HOUR) {
         c.sleep_after = Duration::from_secs(v as u64);
     }
+    if let Some(v) = number("meters_gain", -12, 12) {
+        c.meters_gain = v as i8;
+    }
     if let Some(v) = number("poll_interval_ms", 100, 10_000) {
         c.poll_interval = Duration::from_millis(v as u64);
     }
@@ -163,6 +203,22 @@ pub fn from_store(store: &Store) -> (Config, Vec<String>) {
             Some(driver) => c.driver = driver,
             None => problems.push(format!("display_driver: not framebuffer or spi: {v}")),
         }
+    }
+    // The meters stand at the right unless the store places them, and are
+    // there only when it has them switched on.
+    let mut place = Place::Right;
+    if let Some(v) = store.text("meters_style") {
+        match Place::parse(&v) {
+            Some(named) => place = named,
+            None => problems.push(format!(
+                "meters_style: not vertical_right, vertical_left or horizontal: {v}"
+            )),
+        }
+    }
+    match store.switch("meters") {
+        Ok(Some(true)) => c.meters = Some(place),
+        Ok(Some(false)) | Ok(None) => c.meters = None,
+        Err(e) => problems.push(e),
     }
     if let Some(v) = store.text("log_level") {
         match Level::parse(&v) {
@@ -204,6 +260,8 @@ mod tests {
         assert_eq!(c.wiring.gpio_chip_label, None);
         assert_eq!(c.sleep_after, Duration::from_secs(900));
         assert!(c.splash && c.remote);
+        assert_eq!(c.meters, None);
+        assert_eq!(c.meters_gain, 0);
         assert_eq!(c.log_level, Level::Error);
         assert_eq!(
             c.assets,
@@ -278,6 +336,48 @@ mod tests {
                 "{key}: {problems:?}"
             );
         }
+    }
+
+    #[test]
+    fn the_meters_are_off_unless_switched_on_and_stand_at_the_right_unless_placed() {
+        let parsed = |json: &str| from_store(&Store::parse(json).unwrap());
+        let (c, problems) = parsed(r#"{ "meters": { "type": "boolean", "value": true } }"#);
+        assert_eq!(problems, Vec::<String>::new());
+        assert_eq!(c.meters, Some(Place::Right));
+        assert_eq!(c.meters_gain, 0);
+
+        for (style, place) in [
+            ("vertical_right", Place::Right),
+            ("vertical_left", Place::Left),
+            ("horizontal", Place::Over),
+        ] {
+            let (c, problems) = parsed(&format!(
+                r#"{{ "meters": {{ "type": "boolean", "value": true }},
+                     "meters_style": {{ "type": "string", "value": "{style}" }},
+                     "meters_gain": {{ "type": "number", "value": -6 }} }}"#
+            ));
+            assert_eq!(problems, Vec::<String>::new());
+            assert_eq!(c.meters, Some(place));
+            assert_eq!(c.meters_gain, -6);
+        }
+        assert!(Place::Right.upright() && Place::Left.upright() && !Place::Over.upright());
+
+        // Placed but not switched on: off.
+        let (c, _) = parsed(r#"{ "meters_style": { "type": "string", "value": "horizontal" } }"#);
+        assert_eq!(c.meters, None);
+
+        // A place that is none, and a gain out of range, are named; the
+        // meters still come on, where they stand by default.
+        let (c, problems) = parsed(
+            r#"{ "meters": { "type": "boolean", "value": true },
+                 "meters_style": { "type": "string", "value": "diagonal" },
+                 "meters_gain": { "type": "number", "value": 40 } }"#,
+        );
+        assert_eq!(c.meters, Some(Place::Right));
+        assert_eq!(c.meters_gain, 0);
+        assert_eq!(problems.len(), 2, "{problems:?}");
+        assert!(problems.iter().any(|p| p.contains("meters_style")));
+        assert!(problems.iter().any(|p| p.contains("meters_gain")));
     }
 
     #[test]

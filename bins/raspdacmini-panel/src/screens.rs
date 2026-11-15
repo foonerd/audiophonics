@@ -10,19 +10,22 @@
 //! while the player starts and when it leaves.
 
 use crate::canvas::{Area, Canvas, Rgb, BLACK, HEIGHT, WHITE, WIDTH};
+use crate::config::Place;
+use crate::gauge;
 use crate::icons;
 use crate::mark::Mark;
 use crate::text::{plain, Faces};
 use crate::ticker::Ticker;
+use audiophonics_meters::Bar;
 use audiophonics_player::State;
 use std::time::Instant;
 
 /// The colour of the line that fills as a track plays.
 pub const ACCENT: Rgb = [0xA7, 0x4A, 0x0C];
 /// What is said quietly: a label, a mark that is off.
-const QUIET: Rgb = [150, 150, 150];
+pub(crate) const QUIET: Rgb = [150, 150, 150];
 /// How strongly black is laid over the cover under a bar: seven tenths.
-const BAR_VEIL: u8 = 179;
+pub(crate) const BAR_VEIL: u8 = 179;
 /// How strongly a mark that is off is drawn: three tenths.
 const OFF: u8 = 77;
 
@@ -79,6 +82,9 @@ pub struct Shown<'a> {
     pub filter: &'a str,
     /// How many tracks the queue holds, where that is known.
     pub queue: Option<u64>,
+    /// The level meters, where they are on: where they stand and what
+    /// each channel's shows.
+    pub meters: Option<(Place, [Bar; 2])>,
 }
 
 /// The track as one line: its title, its artist and its album, whichever
@@ -120,6 +126,9 @@ impl Screens {
     ) {
         canvas.put(0, 0, WIDTH, backdrop);
         bar(canvas, shown, faces, 255);
+        if let Some((place, bars)) = &shown.meters {
+            gauge::draw(canvas, *place, bars, faces);
+        }
         progress(canvas, shown.state);
         canvas.veil(BAND, BLACK, BAR_VEIL);
         self.track(canvas, shown.state, faces, TRACK_BASELINE, now);
@@ -335,6 +344,7 @@ mod tests {
             clock: "14:07",
             filter: "brick wall",
             queue: Some(9),
+            meters: None,
         }
     }
 

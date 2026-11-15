@@ -18,6 +18,15 @@
         "BOOT_SPLASH_DOC": "The Audiophonics mark with a word under it while the player's software starts, and when it shuts down or restarts. Off leaves the screen black at those times. With the system framebuffer the player's own screens come first at a start and last at a shutdown.",
         "SLEEP_AFTER": "Black after (seconds)",
         "SLEEP_AFTER_DOC": "How long after the last button on the remote, while nothing plays, the screen goes black. A button, playback starting or a change of volume brings it back. 0 never goes black. The display has no way to switch its light off, so a black screen still glows a little.",
+        "METERS": "Level meters",
+        "METERS_DOC": "Two meters on the first page show how loud each channel is, on a scale of sixty decibels marked in decibels under full scale. The bright part of a meter is the level, the dimmer part reaches to the peak, and a mark holds the highest peak for a moment. The meters read a tap in the player's audio path, which every stream passes through unchanged; it is in that path only while this is on, and after the plugin is first installed it joins it once the player has restarted. There are no meters while the DAC takes its S/PDIF input: that is not the player's stream.",
+        "METERS_STYLE": "Meters: where they stand",
+        "METERS_STYLE_DOC": "Upright beside the cover, at the right or at the left, the left channel first. Or lying over the track's line, the left channel above the right. Upright meters change nearly the whole screen with every frame, which is more than the display can be sent fifty times a second: while they move, the screen is drawn twenty-five times a second, and a track's line that runs moves two pixels at a time. Lying meters leave it at fifty.",
+        "METERS_VERTICAL_RIGHT": "At the right, upright",
+        "METERS_VERTICAL_LEFT": "At the left, upright",
+        "METERS_HORIZONTAL": "Over the track, lying",
+        "METERS_GAIN": "Meters: gain (dB)",
+        "METERS_GAIN_DOC": "Decibels added to what the meters show, from -12 to 12. Raise it for music that leaves the meters low, lower it for music that keeps them at the top. It moves the meters only: what is played is not touched.",
         "SECTION_REMOTE": "Remote control",
         "SECTION_REMOTE_DOC": "Play: play and pause. The keys beside it: seek back and forward. Left and Right: previous and next track. OK: stop. Volume and Mute: the player's volume. Input: the DAC's input, the player or SPDIF. Up: the DAC's next filter. Down: the second page. Option: repeat on or off; held for half a second, shuffle on or off. Power: shuts the player down. After the first installation the player has to restart once before the remote is read.",
         "REMOTE_ACTIVE": "Obey the remote",
@@ -40,6 +49,8 @@
         "RESTART_TITLE": "A restart is needed",
         "RESTART_MSG": "The display and the remote receiver are switched on in the boot configuration, which the player reads when it starts. Restart the player to bring them up.",
         "DRIVER_RESTART_MSG": "The display driver is set in the boot configuration, which the player reads when it starts. Restart the player to change the way the display is driven; until then it goes on as it is.",
+        "PATH_FAILED": "The player's audio path could not be set up: {{error}}",
+        "PATH_RESTART_MSG": "The level meters join the player's audio path when the player starts. Restart the player to bring them in.",
         "BOOT_FAILED": "The boot configuration could not be written: {{error}}"
     }
 }
