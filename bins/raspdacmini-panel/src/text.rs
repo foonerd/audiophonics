@@ -105,7 +105,11 @@ impl Faces {
         let mut pen = x;
         for ch in text.chars() {
             let shape = self.shape(ch, size);
-            if shape.width > 0 {
+            // A character wholly off the glass to either side is only
+            // stepped over: of a long line that runs, most are.
+            let left = pen + shape.left;
+            let on_glass = left < crate::canvas::WIDTH as i32 && left + shape.width as i32 > 0;
+            if shape.width > 0 && on_glass {
                 for (row, line) in shape.cover.chunks_exact(shape.width).enumerate() {
                     let y = baseline - shape.top + row as i32;
                     for (col, &cover) in line.iter().enumerate() {

@@ -140,6 +140,15 @@ impl Canvas {
         if width == 0 {
             return;
         }
+        // Rows as wide as the glass, from its left edge and within it, are
+        // copied as they are: a cover is put down this way for every frame.
+        let rows = pixels.len() / width as usize;
+        if x == 0 && width == WIDTH && y >= 0 && y as usize + rows <= HEIGHT as usize {
+            let from = y as usize * WIDTH as usize;
+            let count = rows * WIDTH as usize;
+            self.px[from..from + count].copy_from_slice(&pixels[..count]);
+            return;
+        }
         for (row, line) in pixels.chunks_exact(width as usize).enumerate() {
             for (col, &colour) in line.iter().enumerate() {
                 self.set(x + col as i32, y + row as i32, colour);
@@ -349,6 +358,16 @@ mod tests {
         assert_eq!(c.get(319, 1), red);
         assert_eq!(c.get(0, 0), BLACK, "the third column fell off the edge");
         c.put(0, 0, 0, &[]);
+        // Whole rows of the glass are taken as they are.
+        let mut whole = Canvas::new();
+        whole.put(0, 238, WIDTH, &vec![red; 2 * WIDTH as usize]);
+        assert_eq!(whole.get(0, 238), red);
+        assert_eq!(whole.get(319, 239), red);
+        assert_eq!(whole.get(319, 237), BLACK);
+        // Rows that would run past the bottom are cut there.
+        let mut cut = Canvas::new();
+        cut.put(0, 239, WIDTH, &vec![red; 2 * WIDTH as usize]);
+        assert_eq!(cut.get(5, 239), red);
     }
 
     #[test]
