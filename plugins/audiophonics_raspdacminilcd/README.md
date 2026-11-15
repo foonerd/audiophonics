@@ -16,7 +16,7 @@ While the DAC takes its other input the screen says which, in large letters. Whi
 
 **The player's own screens.** The display is the system's from the first moments of a start: Volumio's start-up and shutdown screens show on it, and so does the progress of a system update, so the unit never looks dead while it is busy. The plugin draws once those are done.
 
-**Shutting down and restarting.** The system's own shutdown screen comes up some seconds after a shutdown or a restart has begun. Until it does, the display shows the mark with *Shutting down* or *Restarting* under it, whoever asked for it: the player, a command, an update. Where no system screen comes, *Restarting* stays until the next start, and *Shutting down* gives way to a black screen after a few seconds. This is the *System framebuffer* display driver; see [Display driver](#display-driver) for the other.
+**Shutting down and restarting.** The system's own shutdown screen comes up some seconds after a shutdown or a restart has begun. Until it does, the display shows the mark with *Shutting down* or *Restarting* under it, whoever asked for it: the player, a command, an update. The system's screen comes once the network has been taken down, so how long the mark is up depends on how long the player takes to stop. On a system set up to show no screen of its own, and with the *Direct* display driver, *Restarting* stays until the next start, and *Shutting down* gives way to a black screen after three seconds. This is the *System framebuffer* display driver; see [Display driver](#display-driver) for the other.
 
 **The remote.** The streamer acts on every key:
 

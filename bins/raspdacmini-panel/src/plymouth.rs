@@ -19,6 +19,18 @@ pub fn running() -> bool {
     listening(SOCKET)
 }
 
+/// True where the system will bring its splash up as it shuts down: it
+/// does where the kernel was started with `splash`, and without `nosplash`
+/// or `plymouth.enable=0`, which is what the system's own units for it ask.
+pub fn expected() -> bool {
+    std::fs::read_to_string("/proc/cmdline").is_ok_and(|line| expected_in(&line))
+}
+
+fn expected_in(command_line: &str) -> bool {
+    let has = |word: &str| command_line.split_whitespace().any(|w| w == word);
+    has("splash") && !has("nosplash") && !has("plymouth.enable=0")
+}
+
 fn listening(name: &[u8]) -> bool {
     SocketAddr::from_abstract_name(name)
         .and_then(|address| UnixStream::connect_addr(&address))
@@ -29,6 +41,22 @@ fn listening(name: &[u8]) -> bool {
 mod tests {
     use super::*;
     use std::os::unix::net::UnixListener;
+
+    #[test]
+    fn the_systems_splash_is_expected_where_the_kernel_was_started_with_it() {
+        assert!(expected_in(
+            "console=serial0,115200 root=/dev/mmcblk0p2 quiet splash nodebug\n"
+        ));
+        assert!(expected_in("splash"));
+        assert!(!expected_in("console=tty1 root=/dev/mmcblk0p2 quiet"));
+        assert!(!expected_in("quiet splash nosplash"));
+        assert!(!expected_in("quiet splash plymouth.enable=0"));
+        // A word that only contains it is not it.
+        assert!(!expected_in(
+            "plymouth.ignore-serial-consoles nosplashy splashscreen=1"
+        ));
+        assert!(!expected_in(""));
+    }
 
     #[test]
     fn a_daemon_is_running_while_its_socket_answers() {

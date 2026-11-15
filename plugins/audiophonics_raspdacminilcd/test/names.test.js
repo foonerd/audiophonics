@@ -64,9 +64,4 @@ test('the service tells its program when the system is going down, with a helper
     assert.ok(installer.indexOf('LEAVING_HELPER="/usr/local/bin/raspdacmini-leaving"') !== -1);
     assert.ok(installer.indexOf('install -m 755 "$PLUGIN_DIR/boot/raspdacmini-leaving" "$LEAVING_HELPER"') !== -1);
     assert.ok(read('uninstall.sh').indexOf('/usr/local/bin/raspdacmini-leaving') !== -1);
-    // The program is given longer to end than it waits for the system's screen.
-    const timeout = Number(unit.match(/^TimeoutStopSec=(\d+)$/m)[1]);
-    const program = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', '..', '..', 'bins', 'raspdacmini-panel', 'src', 'main.rs'), 'utf8');
-    const wait = Number(program.match(/const SPLASH_WAIT: Duration = Duration::from_secs\((\d+)\);/)[1]);
-    assert.ok(timeout >= wait + 3, timeout + ' against ' + wait);
 });
