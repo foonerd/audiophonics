@@ -20,7 +20,7 @@ The display, its two lines and the receiver are wired as on the [EVO Sabre](evo-
 
 With the kernel driving the display, as a framebuffer:
 
-    dtoverlay=fbtft,spi0-0,ili9341,bgr,reset_pin=24,dc_pin=27,rotate=90,speed=64000000,fps=30
+    dtoverlay=fbtft,spi0-0,ili9341,bgr,reset_pin=24,dc_pin=27,rotate=90,speed=64000000,fps=100
     dtoverlay=gpio-ir,gpio_pin=4
 
 With the plugin's program driving it over SPI:
@@ -28,7 +28,7 @@ With the plugin's program driving it over SPI:
     dtparam=spi=on
     dtoverlay=gpio-ir,gpio_pin=4
 
-The plugin writes one pair or the other into its own block of `/boot/userconfig.txt`, as its *Display driver* setting says. The DAC's overlay is written by Volumio when the DAC is chosen in Playback Options, as "Audiophonics I-Sabre ES9028Q2M".
+The plugin writes one pair or the other into its own block of `/boot/userconfig.txt`, as its *Display driver* setting says. As a framebuffer, the kernel sends the display the rows that changed within a hundredth of a second of their changing (`fps=100`). The DAC's overlay is written by Volumio when the DAC is chosen in Playback Options, as "Audiophonics I-Sabre ES9028Q2M".
 
 ## The display
 

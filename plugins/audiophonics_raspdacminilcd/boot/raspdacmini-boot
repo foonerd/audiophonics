@@ -24,8 +24,9 @@ MARK_BEGIN="# >>> raspdac_mini_lcd"
 MARK_END="# <<< raspdac_mini_lcd"
 # The panel as it is wired and mounted: an ILI9341 on SPI0 CE0, its colours
 # in the order blue, green, red, reset on GPIO 24 and D/C on GPIO 27, on
-# its side, at 64 MHz.
-PANEL="dtoverlay=fbtft,spi0-0,ili9341,bgr,reset_pin=24,dc_pin=27,rotate=90,speed=64000000,fps=30"
+# its side, at 64 MHz, and sent what changes within a hundredth of a
+# second of its changing, which is what keeps a running line even.
+PANEL="dtoverlay=fbtft,spi0-0,ili9341,bgr,reset_pin=24,dc_pin=27,rotate=90,speed=64000000,fps=100"
 RECEIVER="dtoverlay=gpio-ir,gpio_pin=4"
 
 case "$DRIVER" in

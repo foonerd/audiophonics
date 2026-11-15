@@ -198,7 +198,7 @@ no_version_1() {
 }
 
 block='# >>> raspdac_mini_lcd
-dtoverlay=fbtft,spi0-0,ili9341,bgr,reset_pin=24,dc_pin=27,rotate=90,speed=64000000,fps=30
+dtoverlay=fbtft,spi0-0,ili9341,bgr,reset_pin=24,dc_pin=27,rotate=90,speed=64000000,fps=100
 dtoverlay=gpio-ir,gpio_pin=4
 # <<< raspdac_mini_lcd'
 block_spi='# >>> raspdac_mini_lcd
@@ -365,7 +365,7 @@ printf 'dtoverlay=gpio-ir,gpio_pin=4,rc-map-name=rc-empty\n# IR Remote Control (
 sh "$PLUGIN/install.sh" > /dev/null
 [ "$(cat "$USERCONFIG")" = 'dtoverlay=gpio-ir,gpio_pin=4,rc-map-name=rc-empty
 # >>> raspdac_mini_lcd
-dtoverlay=fbtft,spi0-0,ili9341,bgr,reset_pin=24,dc_pin=27,rotate=90,speed=64000000,fps=30
+dtoverlay=fbtft,spi0-0,ili9341,bgr,reset_pin=24,dc_pin=27,rotate=90,speed=64000000,fps=100
 # <<< raspdac_mini_lcd' ] || fail "variant: the boot configuration is not as expected"
 echo "ok: a receiver overlay already there is kept and not written a second time"
 

@@ -28,6 +28,7 @@
 //! for again every few seconds.
 
 mod art;
+mod beat;
 mod canvas;
 mod config;
 mod cover;
@@ -54,6 +55,7 @@ use audiophonics_player::probe::{Probe, Report};
 use audiophonics_player::{Player, Volumio};
 use audiophonics_remote::watch::{self, Watch};
 use audiophonics_remote::{Event, Press, Status};
+use beat::Beat;
 use canvas::{Area, Canvas, Frame, Rgb};
 use config::Config;
 use cover::{Arrived, Covers, Shelf};
@@ -94,8 +96,10 @@ usage: raspdacmini-panel [--config FILE]
   --player URL     with --cover: where the player is
   --version        say which build this is";
 
-/// A frame of whatever moves: a line that runs, a page that slides.
-const FRAME: Duration = Duration::from_millis(40);
+/// A frame of whatever moves: a line that runs, a page that slides. A line
+/// runs at fifty pixels a second (`ticker::SPEED`), so a frame is one pixel
+/// of it.
+const FRAME: Duration = Duration::from_millis(20);
 /// How often the address is looked up again, in polls.
 const ADDRESS_EVERY: u32 = 10;
 /// How often the time zone is read again, in polls: it may be changed while
@@ -400,6 +404,8 @@ fn run(path: &str) -> Result<(), String> {
         present(&mut panel, &mut shown, &greeting).map_err(display)?;
     }
     let started = Instant::now();
+    // What moves is drawn on an even beat: see `beat`.
+    let beat = Beat::new(started, FRAME);
 
     let (tx, rx) = mpsc::channel::<Msg>();
     let mut status = Status::new();
@@ -662,19 +668,22 @@ fn run(path: &str) -> Result<(), String> {
                     };
                     let backdrop: &[Rgb] = shelf.backdrop().unwrap_or(&no_cover);
                     let mut canvas = Canvas::new();
+                    // The frame is drawn for the beat it falls on, not for
+                    // the moment the loop came round to it.
+                    let at = beat.nearest(Instant::now());
                     if let Some(name) = dac_board.other_input() {
                         pages.reset();
                         screens::input(&mut canvas, name, &what, &mut faces);
                     } else {
-                        match pages.offset(now) {
-                            0 => screens.playing(&mut canvas, backdrop, &what, &mut faces, now),
+                        match pages.offset(at) {
+                            0 => screens.playing(&mut canvas, backdrop, &what, &mut faces, at),
                             pages::TRAVEL => {
-                                screens.details(&mut canvas, backdrop, &what, &mut faces, now)
+                                screens.details(&mut canvas, backdrop, &what, &mut faces, at)
                             }
                             moved => {
                                 let mut second = Canvas::new();
-                                screens.playing(&mut canvas, backdrop, &what, &mut faces, now);
-                                screens.details(&mut second, backdrop, &what, &mut faces, now);
+                                screens.playing(&mut canvas, backdrop, &what, &mut faces, at);
+                                screens.details(&mut second, backdrop, &what, &mut faces, at);
                                 canvas = canvas.slid(&second, moved, screens::DETAILS_BAND.h);
                             }
                         }
@@ -699,7 +708,7 @@ fn run(path: &str) -> Result<(), String> {
         if !asleep && !yielded {
             let player_up = probe.state().is_some();
             if player_up && (pages.sliding(now) || screens.moving()) {
-                wake = wake.min(now + FRAME);
+                wake = wake.min(beat.after(now));
             }
             wake = wake.min(dac_board.look_at);
             if let Some(at) = shelf.retry_at() {

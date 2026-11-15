@@ -10,14 +10,17 @@
 //! HDMI output or the firmware's own framebuffer can come before it or
 //! after it.
 //!
-//! The kernel sends the panel the whole picture whenever any of it is
-//! written, so only the rows that changed are written, and no more often
-//! than the picture changes.
+//! The framebuffer's memory is mapped into this program, and the rows that
+//! changed are copied into it. That is what keeps a moving line even: the
+//! kernel's driver sends the panel only the rows of the memory pages that
+//! were touched through a mapping, a moment after they were touched, where
+//! after a plain write to the device it sends the whole picture, which
+//! takes it longer than a frame lasts.
 
 use crate::canvas::{Area, Frame, HEIGHT, WIDTH};
 use crate::handover;
+use memmap2::{MmapMut, MmapOptions};
 use std::fs::{File, OpenOptions};
-use std::os::unix::fs::FileExt;
 use std::path::{Path, PathBuf};
 
 /// The name the kernel's driver gives the panel's framebuffer.
@@ -27,10 +30,21 @@ const GRAPHICS: &str = "/sys/class/graphics";
 const DEVICES: &str = "/dev";
 
 pub struct FbDev {
-    file: File,
+    /// The framebuffer's memory: the picture's rows, one after another.
+    memory: MmapMut,
     /// Bytes from the start of one row to the start of the next.
-    stride: u64,
+    stride: usize,
     description: String,
+}
+
+/// Map the first `len` bytes of a framebuffer's memory.
+#[allow(unsafe_code)]
+fn map(file: &File, len: usize) -> std::io::Result<MmapMut> {
+    // SAFETY: what is mapped is a framebuffer's memory, which the kernel
+    // keeps at its size for as long as the device is open. Bytes are only
+    // ever copied into it; nothing is read back from it, so what else
+    // draws on the same framebuffer cannot mislead this program.
+    unsafe { MmapOptions::new().len(len).map_mut(file) }
 }
 
 /// The framebuffer that is the panel, among those the kernel lists under
@@ -91,21 +105,23 @@ impl FbDev {
         if bits != "16" {
             return Err(format!("{name} has {bits} bits a pixel, not 16"));
         }
-        let stride: u64 = read("stride")?
+        let stride: usize = read("stride")?
             .parse()
             .map_err(|_| format!("{name}: its stride is not a number"))?;
-        if stride < u64::from(WIDTH) * 2 {
+        if stride < WIDTH as usize * 2 {
             return Err(format!(
                 "{name}: a stride of {stride} bytes is less than a row"
             ));
         }
         let path: PathBuf = devices.join(&name);
         let file = handover::open(&path.display().to_string(), || {
-            OpenOptions::new().write(true).open(&path)
+            OpenOptions::new().read(true).write(true).open(&path)
         })
         .map_err(|e| format!("{}: {e}", path.display()))?;
+        let memory = map(&file, stride * HEIGHT as usize)
+            .map_err(|e| format!("{}: its memory cannot be mapped: {e}", path.display()))?;
         Ok(Self {
-            file,
+            memory,
             stride,
             description: format!("{} ({PANEL}), {size}, {bits} bits a pixel", path.display()),
         })
@@ -115,27 +131,25 @@ impl FbDev {
         &self.description
     }
 
-    /// Write the rows an area touches. The kernel sends the panel the whole
-    /// picture after any write, so there is nothing to gain from less than
-    /// whole rows.
+    /// Copy in the rows an area touches. The kernel sends the panel whole
+    /// rows, those of the memory pages touched, so there is nothing to gain
+    /// from less than whole rows.
     pub fn show(&mut self, frame: &Frame, area: Area) -> Result<(), String> {
         if area.h == 0 || area.y + area.h > HEIGHT {
             return Err(format!("{area:?} is not an area of the glass"));
         }
         let row = WIDTH as usize * 2;
-        let failed = |e: std::io::Error| format!("framebuffer write: {e}");
-        if self.stride == row as u64 {
-            return self
-                .file
-                .write_all_at(&frame.rows(area.y, area.h), u64::from(area.y) * self.stride)
-                .map_err(failed);
+        let (first, count) = (area.y as usize, area.h as usize);
+        if self.stride == row {
+            self.memory[first * row..(first + count) * row]
+                .copy_from_slice(&frame.rows(area.y, area.h));
+            return Ok(());
         }
         // A framebuffer whose rows are longer than the picture's: a row at
         // a time, each at its own place.
         for y in area.y..area.y + area.h {
-            self.file
-                .write_all_at(&frame.rows(y, 1), u64::from(y) * self.stride)
-                .map_err(failed)?;
+            let at = y as usize * self.stride;
+            self.memory[at..at + row].copy_from_slice(&frame.rows(y, 1));
         }
         Ok(())
     }
@@ -162,7 +176,11 @@ mod tests {
             std::fs::write(sys.join("virtual_size"), format!("{size}\n")).unwrap();
             std::fs::write(sys.join("bits_per_pixel"), format!("{bits}\n")).unwrap();
             std::fs::write(sys.join("stride"), format!("{stride}\n")).unwrap();
-            std::fs::write(devices.join(format!("fb{number}")), b"").unwrap();
+            // The device has the framebuffer's memory behind it: its rows,
+            // all black.
+            let rows: usize = size.split(',').nth(1).and_then(|h| h.parse().ok()).unwrap();
+            let memory = stride.parse::<usize>().map_or(0, |stride| stride * rows);
+            std::fs::write(devices.join(format!("fb{number}")), vec![0u8; memory]).unwrap();
         }
         (graphics, devices)
     }
@@ -226,10 +244,10 @@ mod tests {
         let frame = Frame::from(&canvas);
         fb.show(&frame, Area::new(3, 100, 3, 2)).unwrap();
         let written = std::fs::read(devices.join("fb1")).unwrap();
-        assert_eq!(
-            written.len(),
-            102 * 640,
-            "up to the end of the last row touched"
+        assert_eq!(written.len(), 240 * 640);
+        assert!(
+            written[102 * 640..].iter().all(|&b| b == 0),
+            "nothing after the last row touched"
         );
         assert_eq!(written[100 * 640 + 6..100 * 640 + 8], [0xFF, 0xFF]);
         assert_eq!(

@@ -29,11 +29,17 @@ resvg = { version = "0.48", default-features = false }
 # src/ili9341.rs where they can be read.
 spidev = "0.7"
 gpio-cdev = "0.6"
+# The panel as a framebuffer: its memory, mapped.
+memmap2 = "0.9"
 signal-hook = { version = "0.3", default-features = false }
 serde_json.workspace = true
 
 [dev-dependencies]
 audiophonics-unifont = { path = "../../crates/unifont", features = ["sample"] }
 
-[lints]
-workspace = true
+# As the workspace's, but for the one function in src/fbdev.rs that maps
+# the framebuffer's memory: deny, with the exception written where it is
+# made.
+[lints.rust]
+unsafe_code = "deny"
+unused_qualifications = "warn"
