@@ -36,6 +36,12 @@ for plugin in "${plugins[@]}"; do
   version=$(sed -n 's/^version = "\(.*\)"/\1/p' "bins/$CRATE/Cargo.toml" | head -n1)
   bin="target/ship/$plugin/bin/$CRATE"
   [ -x "$bin" ] || { echo "package: $bin is not built; run scripts/ship.sh $plugin first" >&2; exit 1; }
+  # The zip names the commit it is made at, so the program in it has to be
+  # one built from the sources as they are now.
+  if [ "$(cat "target/ship/$plugin/sources" 2>/dev/null)" != "$(scripts/sources.sh)" ]; then
+    echo "package: $bin was built from other sources than these; run scripts/ship.sh $plugin first" >&2
+    exit 1
+  fi
 
   stage="dist/stage/$plugin"
   rm -rf dist/stage

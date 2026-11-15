@@ -2,7 +2,8 @@
 # Build each plugin's program as the players run it: one static musl binary
 # for the 32-bit ARM userland Volumio runs on every Raspberry Pi, whatever
 # the kernel beneath it. Output: target/ship/<plugin>/bin/<program>.
-# Players run these files; they do not run cargo.
+# Players run these files; they do not run cargo. Beside each program goes a
+# digest of the sources it was built from (scripts/sources.sh).
 #
 #   scripts/ship.sh              every plugin
 #   scripts/ship.sh audiophonics_evosabre    the ones named
@@ -40,9 +41,14 @@ for plugin in "${plugins[@]}"; do
   CRATE=
   . "plugins/$plugin/build.conf"
   echo "ship: $plugin ($CRATE, $TRIPLE)"
+  # The sources as they are when the build starts: scripts/package.sh takes
+  # the program only for as long as they stay so.
+  sources=$(scripts/sources.sh)
+  rm -f "target/ship/$plugin/sources"
   cargo build --release --locked --target "$TRIPLE" -p "$CRATE"
   bin="target/ship/$plugin/bin/$CRATE"
   install -D -m 755 "target/$TRIPLE/release/$CRATE" "$bin"
+  echo "$sources" > "target/ship/$plugin/sources"
 
   # Static, or the player's loader has a say in whether it starts.
   if readelf -lW "$bin" | grep -q INTERP || readelf -dW "$bin" 2>/dev/null | grep -q NEEDED; then
