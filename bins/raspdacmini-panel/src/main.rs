@@ -59,7 +59,7 @@ use audiophonics_remote::watch::{self, Watch};
 use audiophonics_remote::{Event, Press, Status};
 use beat::Beat;
 use canvas::{Area, Canvas, Frame, Rgb};
-use config::Config;
+use config::{Config, Place};
 use cover::{Arrived, Covers, Shelf};
 use dac::{Amixer, Dac};
 use keys::{Action, Keys};
@@ -423,6 +423,7 @@ fn run(path: &str) -> Result<(), String> {
     let slow = Beat::new(started, FRAME * 2);
     let mut source = levels::Source::new(TAP_TAG);
     let mut needles = Meters::default();
+    let mut fed_for: Option<Instant> = None;
 
     let (tx, rx) = mpsc::channel::<Msg>();
     let mut status = Status::new();
@@ -643,9 +644,6 @@ fn run(path: &str) -> Result<(), String> {
                 // Whatever changed while it was black is read at once.
                 dac_board.look_at = now;
             }
-            if now >= dac_board.look_at {
-                dac_board.look(now);
-            }
             // The cover of what plays: asked for when the track names a new
             // one, and again when one that failed is due.
             let albumart = probe.state().map_or("", |s| s.albumart.as_str());
@@ -683,10 +681,22 @@ fn run(path: &str) -> Result<(), String> {
                     // frame.
                     let first_page = dac_board.other_input().is_none()
                         && (pages.on() == Page::First || pages.sliding(now));
-                    let meters = cfg.meters.filter(|_| first_page).map(|place| {
-                        let gain = f32::from(cfg.meters_gain);
-                        let heard = source.take(now).map(|level| level.gained(gain));
-                        needles.feed(heard, now);
+                    let placed = cfg.meters.filter(|_| first_page);
+                    metering = placed.is_some() && (state.is_playing() || !needles.at_rest());
+                    if metering && placed.is_some_and(Place::upright) {
+                        pace = slow;
+                    }
+                    // The frame is drawn for the beat it is in, not for the
+                    // moment the loop came round to it; and the meters move
+                    // once a beat, however often the loop comes round.
+                    let at = pace.of(Instant::now());
+                    let meters = placed.map(|place| {
+                        if fed_for != Some(at) {
+                            fed_for = Some(at);
+                            let gain = f32::from(cfg.meters_gain);
+                            let heard = source.take(at).map(|level| level.gained(gain));
+                            needles.feed(heard, at);
+                        }
                         match source.changed() {
                             Some(true) => info!(
                                 "meters: reading {}",
@@ -699,10 +709,6 @@ fn run(path: &str) -> Result<(), String> {
                         }
                         (place, needles.bars())
                     });
-                    metering = meters.is_some() && (state.is_playing() || !needles.at_rest());
-                    if metering && meters.is_some_and(|(place, _)| place.upright()) {
-                        pace = slow;
-                    }
                     let what = Shown {
                         state: &state,
                         address: &ip,
@@ -713,9 +719,6 @@ fn run(path: &str) -> Result<(), String> {
                     };
                     let backdrop: &[Rgb] = shelf.backdrop().unwrap_or(&no_cover);
                     let mut canvas = Canvas::new();
-                    // The frame is drawn for the beat it falls on, not for
-                    // the moment the loop came round to it.
-                    let at = pace.nearest(Instant::now());
                     if let Some(name) = dac_board.other_input() {
                         pages.reset();
                         screens::input(&mut canvas, name, &what, &mut faces);
@@ -740,6 +743,11 @@ fn run(path: &str) -> Result<(), String> {
                 error!("text: {problem}");
             }
             present(&mut panel, &mut shown, &canvas).map_err(display)?;
+            // The board is read after the frame is out, so that reading it
+            // does not hold a frame back.
+            if now >= dac_board.look_at {
+                dac_board.look(now);
+            }
         }
 
         // Sleep until the next poll, the next frame of what moves, a button
@@ -753,9 +761,12 @@ fn run(path: &str) -> Result<(), String> {
         if !asleep && !yielded {
             let player_up = probe.state().is_some();
             if player_up && (pages.sliding(now) || screens.moving() || metering) {
+                // Something moves: the loop comes round on every beat, and
+                // the board is read after one of them.
                 wake = wake.min(pace.after(now));
+            } else {
+                wake = wake.min(dac_board.look_at);
             }
-            wake = wake.min(dac_board.look_at);
             if let Some(at) = shelf.retry_at() {
                 wake = wake.min(at);
             }

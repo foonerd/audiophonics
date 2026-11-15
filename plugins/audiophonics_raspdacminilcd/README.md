@@ -53,7 +53,7 @@ Installing over version 1 of the plugin replaces it, keeps your settings and sta
 | Mark at start and at shutdown | The Audiophonics mark with a word under it while the player's software starts, shuts down or restarts. Off leaves the screen black at those times. |
 | Black after | Seconds after the last key on the remote, while nothing plays, before the screen goes black. 0 never goes black. |
 | Level meters | Two meters on the first page, one a channel. Off unless you switch them on. |
-| Meters: where they stand | Upright at the right of the cover, upright at the left, or lying over the track's line. |
+| Meters: where they stand | Upright at the right of the cover, at the left, or one at each side; or lying over the track's line. |
 | Meters: gain (dB) | Decibels added to what the meters show, -12 to 12. What is played is not touched. |
 | Obey the remote | Off leaves every key without effect. |
 | Check the remote | Says whether the receiver is being read and which key arrived last. |
@@ -67,7 +67,7 @@ The display has no line to switch its light off, so a black screen still glows a
 
 Switch *Level meters* on and two meters stand on the first page, one a channel, on a scale of sixty decibels. The bright part of a meter is the level, averaged as a VU meter averages; the dimmer part reaches to the peak; a mark holds the highest peak for a moment before it falls. The scale's marks stand at full scale and at 3, 6, 10, 20, 30, 40, 50 and 60 decibels under it, and five of them are named.
 
-*Meters: where they stand* places them. Upright, they stand in a strip beside the cover, at the right or at the left, the left channel first and the scale running from the bottom up. Lying, they are in a strip over the track's line, the left channel above the right and the scale running from left to right.
+*Meters: where they stand* places them. Upright, they stand in a strip beside the cover, at the right or at the left, the left channel first; or one at each side, the left channel's at the left of the cover and the right channel's at the right, each with its own scale. An upright scale runs from the bottom up. Lying, they are in a strip over the track's line, the left channel above the right and the scale running from left to right.
 
 Where they stand has a cost. The display is sent whole rows, from the topmost that changed to the bottommost, and upright meters change nearly every row with every frame: that is more than can be sent fifty times a second. While upright meters move, the screen is drawn twenty-five times a second, and a track's line that runs moves two pixels at a time. Lying meters change only the rows above the track's line, and leave it at fifty and one pixel.
 

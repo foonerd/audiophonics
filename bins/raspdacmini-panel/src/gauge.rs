@@ -36,6 +36,8 @@ const HOLD_THICK: i32 = 2;
 /// Upright: a strip beside the cover, from under the bar at the top to the
 /// progress line. Full scale is at its top row, the floor at its bottom.
 const STRIP_WIDTH: u32 = 34;
+/// One meter and its scale, at each side.
+const SIDE_WIDTH: u32 = 27;
 const STRIP_TOP: u32 = 18;
 const STRIP_HEIGHT: u32 = 189;
 const UP_TOP: i32 = 30;
@@ -66,9 +68,34 @@ fn fill(canvas: &mut Canvas, x: i32, y: i32, w: i32, h: i32, colour: Rgb) {
 
 /// Draw the meters where they stand.
 pub fn draw(canvas: &mut Canvas, place: Place, bars: &[Bar; 2], faces: &mut Faces) {
+    let [left, right] = bars;
     match place {
-        Place::Right => upright(canvas, (WIDTH - STRIP_WIDTH) as i32, true, bars, faces),
-        Place::Left => upright(canvas, 0, false, bars, faces),
+        // Both in one strip, the left channel the first met from the left,
+        // the scale on the cover's side of them.
+        Place::Right => {
+            let x0 = (WIDTH - STRIP_WIDTH) as i32;
+            strip(canvas, x0, STRIP_WIDTH);
+            scale(canvas, x0 + 13, x0 + 12, true, faces);
+            column(canvas, x0 + 17, left, "L", faces);
+            column(canvas, x0 + 25, right, "R", faces);
+        }
+        Place::Left => {
+            strip(canvas, 0, STRIP_WIDTH);
+            column(canvas, 3, left, "L", faces);
+            column(canvas, 11, right, "R", faces);
+            scale(canvas, 18, 22, false, faces);
+        }
+        // One in a strip of its own at each side, each with its scale on
+        // the cover's side of it.
+        Place::Sides => {
+            strip(canvas, 0, SIDE_WIDTH);
+            column(canvas, 3, left, "L", faces);
+            scale(canvas, 10, 14, false, faces);
+            let x0 = (WIDTH - SIDE_WIDTH) as i32;
+            strip(canvas, x0, SIDE_WIDTH);
+            scale(canvas, x0 + 14, x0 + 13, true, faces);
+            column(canvas, x0 + 18, right, "R", faces);
+        }
         Place::Over => lying(canvas, bars, faces),
     }
 }
@@ -80,40 +107,43 @@ fn up_row(db_under: u8) -> i32 {
     (UP_BOTTOM - length + 1).min(UP_BOTTOM)
 }
 
-fn upright(canvas: &mut Canvas, x0: i32, right: bool, bars: &[Bar; 2], faces: &mut Faces) {
+/// The veil an upright strip stands on, `width` wide from column `x0`.
+fn strip(canvas: &mut Canvas, x0: i32, width: u32) {
     canvas.veil(
-        Area::new(x0 as u32, STRIP_TOP, STRIP_WIDTH, STRIP_HEIGHT),
+        Area::new(x0 as u32, STRIP_TOP, width, STRIP_HEIGHT),
         BLACK,
         BAR_VEIL,
     );
-    // The scale stands on the cover's side of the meters, the left channel
-    // is the first met from the left.
-    let (meters, marks, numbers) = if right {
-        ([x0 + 17, x0 + 25], x0 + 13, x0 + 12)
-    } else {
-        ([x0 + 3, x0 + 11], x0 + 18, x0 + 22)
-    };
+}
+
+/// One upright meter with its channel's letter over it, its left column
+/// at `x`.
+fn column(canvas: &mut Canvas, x: i32, bar: &Bar, letter: &str, faces: &mut Faces) {
     let span = UP_BOTTOM - UP_TOP + 1;
-    for ((bar, x), letter) in bars.iter().zip(meters).zip(["L", "R"]) {
-        let centred = x + (THICK - faces.width(letter, TEXT)) / 2;
-        faces.draw(canvas, letter, centred, UP_LETTERS, TEXT, QUIET);
-        fill(canvas, x, UP_TOP, THICK, span, TROUGH);
-        for (part, colour) in [(bar.peak, PEAK), (bar.level, LEVEL)] {
-            let length = along(span, part);
-            fill(canvas, x, UP_BOTTOM - length + 1, THICK, length, colour);
-        }
-        let held = along(span, bar.hold);
-        if held > 0 {
-            let top = (UP_BOTTOM - held + 1).min(UP_BOTTOM - HOLD_THICK + 1);
-            fill(canvas, x, top, THICK, HOLD_THICK, HOLD);
-        }
+    let centred = x + (THICK - faces.width(letter, TEXT)) / 2;
+    faces.draw(canvas, letter, centred, UP_LETTERS, TEXT, QUIET);
+    fill(canvas, x, UP_TOP, THICK, span, TROUGH);
+    for (part, colour) in [(bar.peak, PEAK), (bar.level, LEVEL)] {
+        let length = along(span, part);
+        fill(canvas, x, UP_BOTTOM - length + 1, THICK, length, colour);
     }
+    let held = along(span, bar.hold);
+    if held > 0 {
+        let top = (UP_BOTTOM - held + 1).min(UP_BOTTOM - HOLD_THICK + 1);
+        fill(canvas, x, top, THICK, HOLD_THICK, HOLD);
+    }
+}
+
+/// An upright scale: its marks from column `marks`, and the numbers of
+/// those that are named, which begin at column `numbers` or, `ending`
+/// there, end before it.
+fn scale(canvas: &mut Canvas, marks: i32, numbers: i32, ending: bool, faces: &mut Faces) {
     for db in MARKS {
         let row = up_row(db);
         fill(canvas, marks, row, 3, 1, QUIET);
         if NAMED.contains(&db) {
             let name = db.to_string();
-            let x = if right {
+            let x = if ending {
                 numbers - faces.width(&name, TEXT)
             } else {
                 numbers
@@ -203,12 +233,19 @@ mod tests {
         for (place, strip) in [
             (Place::Right, (286..320, 18..207)),
             (Place::Left, (0..34, 18..207)),
+            (Place::Sides, (27..293, 0..0)),
             (Place::Over, (0..320, 178..207)),
         ] {
             let canvas = drawn(place, loud);
             for y in 0..HEIGHT as i32 {
                 for x in 0..WIDTH as i32 {
-                    let inside = strip.0.contains(&x) && strip.1.contains(&y);
+                    // At both sides the strips are what is outside the
+                    // middle; elsewhere the strip is what is named.
+                    let inside = if place == Place::Sides {
+                        !strip.0.contains(&x) && (18..207).contains(&y)
+                    } else {
+                        strip.0.contains(&x) && strip.1.contains(&y)
+                    };
                     if !inside {
                         assert_eq!(canvas.get(x, y), GROUND, "{place:?} at {x},{y}");
                     }
@@ -283,6 +320,29 @@ mod tests {
         // The ends of the scale are the ends of the meter.
         assert_eq!((up_row(0), up_row(60)), (UP_TOP, UP_BOTTOM));
         assert_eq!((ly_column(60), ly_column(0)), (LY_LEFT, LY_RIGHT));
+    }
+
+    #[test]
+    fn at_both_sides_each_channel_has_its_own_side() {
+        // The left channel at half the scale, the right silent.
+        let canvas = drawn(
+            Place::Sides,
+            [bar(-30.0, -30.0, -60.0), bar(-60.0, -60.0, -60.0)],
+        );
+        assert_eq!(count(&canvas, LEVEL, 0..27, 18..207), 86 * 6);
+        assert_eq!(count(&canvas, LEVEL, 293..320, 18..207), 0);
+        assert_eq!(count(&canvas, TROUGH, 293..320, 18..207), 171 * 6);
+        // And the other way about.
+        let canvas = drawn(
+            Place::Sides,
+            [bar(-60.0, -60.0, -60.0), bar(-30.0, -30.0, -60.0)],
+        );
+        assert_eq!(count(&canvas, LEVEL, 0..27, 18..207), 0);
+        assert_eq!(count(&canvas, LEVEL, 293..320, 18..207), 86 * 6);
+        // Each side has the scale's marks, at the same rows.
+        let row = up_row(20);
+        assert_eq!(canvas.get(10, row), QUIET);
+        assert_eq!(canvas.get(293 + 14, row), QUIET);
     }
 
     #[test]

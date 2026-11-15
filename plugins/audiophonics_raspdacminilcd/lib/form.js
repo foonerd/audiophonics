@@ -11,7 +11,7 @@ const NUMBERS = {
 const SWITCHES = ['lcd_active', 'boot_splash', 'meters', 'remote_active'];
 const SELECTS = {
     display_driver: ['framebuffer', 'spi'],
-    meters_style: ['vertical_right', 'vertical_left', 'horizontal'],
+    meters_style: ['vertical_right', 'vertical_left', 'vertical_both', 'horizontal'],
     log_level: ['error', 'info', 'debug']
 };
 

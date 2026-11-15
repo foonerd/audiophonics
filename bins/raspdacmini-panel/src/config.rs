@@ -47,6 +47,9 @@ pub enum Place {
     Right,
     /// Upright, at the left of the cover.
     Left,
+    /// Upright, one at each side of the cover: the left channel's at the
+    /// left, the right channel's at the right.
+    Sides,
     /// Lying, over the track's line.
     Over,
 }
@@ -56,6 +59,7 @@ impl Place {
         match s.trim() {
             "vertical_right" => Some(Self::Right),
             "vertical_left" => Some(Self::Left),
+            "vertical_both" => Some(Self::Sides),
             "horizontal" => Some(Self::Over),
             _ => None,
         }
@@ -65,7 +69,7 @@ impl Place {
     /// nearly every row of the glass with every frame, which is more than
     /// can be sent to the panel fifty times a second.
     pub fn upright(self) -> bool {
-        matches!(self, Self::Right | Self::Left)
+        matches!(self, Self::Right | Self::Left | Self::Sides)
     }
 }
 
@@ -211,7 +215,7 @@ pub fn from_store(store: &Store) -> (Config, Vec<String>) {
         match Place::parse(&v) {
             Some(named) => place = named,
             None => problems.push(format!(
-                "meters_style: not vertical_right, vertical_left or horizontal: {v}"
+                "meters_style: not vertical_right, vertical_left, vertical_both or horizontal: {v}"
             )),
         }
     }
@@ -349,6 +353,7 @@ mod tests {
         for (style, place) in [
             ("vertical_right", Place::Right),
             ("vertical_left", Place::Left),
+            ("vertical_both", Place::Sides),
             ("horizontal", Place::Over),
         ] {
             let (c, problems) = parsed(&format!(
@@ -360,7 +365,8 @@ mod tests {
             assert_eq!(c.meters, Some(place));
             assert_eq!(c.meters_gain, -6);
         }
-        assert!(Place::Right.upright() && Place::Left.upright() && !Place::Over.upright());
+        assert!(Place::Right.upright() && Place::Left.upright() && Place::Sides.upright());
+        assert!(!Place::Over.upright());
 
         // Placed but not switched on: off.
         let (c, _) = parsed(r#"{ "meters_style": { "type": "string", "value": "horizontal" } }"#);

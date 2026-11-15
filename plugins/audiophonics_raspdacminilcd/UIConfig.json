@@ -110,6 +110,10 @@
                             "label": "TRANSLATE.RASPDACMINI.METERS_VERTICAL_LEFT"
                         },
                         {
+                            "value": "vertical_both",
+                            "label": "TRANSLATE.RASPDACMINI.METERS_VERTICAL_BOTH"
+                        },
+                        {
                             "value": "horizontal",
                             "label": "TRANSLATE.RASPDACMINI.METERS_HORIZONTAL"
                         }

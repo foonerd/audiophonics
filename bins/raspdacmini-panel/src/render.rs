@@ -169,6 +169,7 @@ pub fn all(dir: &Path, assets: &Path) -> Result<Vec<PathBuf>, String> {
     for (name, place) in [
         ("meters-right", Place::Right),
         ("meters-left", Place::Left),
+        ("meters-sides", Place::Sides),
         ("meters-lying", Place::Over),
     ] {
         let state = playing();
@@ -222,7 +223,7 @@ mod tests {
     fn every_screen_is_written_as_a_panel_sized_image() {
         let dir = std::env::temp_dir().join(format!("raspdacmini-render-{}", std::process::id()));
         let files = all(&dir, &assets()).unwrap();
-        assert_eq!(files.len(), 19);
+        assert_eq!(files.len(), 20);
         for file in &files {
             let bytes = std::fs::read(file).unwrap();
             assert!(
@@ -244,7 +245,7 @@ mod tests {
     fn the_screens_are_drawn_without_any_asset_at_all() {
         let dir = std::env::temp_dir().join(format!("raspdacmini-bare-{}", std::process::id()));
         let files = all(&dir, Path::new("/nonexistent")).unwrap();
-        assert_eq!(files.len(), 19);
+        assert_eq!(files.len(), 20);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }
