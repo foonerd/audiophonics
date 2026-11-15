@@ -179,7 +179,12 @@ fn run_helper(program: &std::path::Path, base: &str, albumart: &str) -> Result<V
     let said = said.join().unwrap_or_default();
     let status = status?;
     if !status.success() {
+        // The helper says who it is before what went wrong; here it is
+        // already known.
         let said = said.trim();
+        let said = said
+            .strip_prefix(concat!(env!("CARGO_PKG_NAME"), ": "))
+            .unwrap_or(said);
         return Err(if said.is_empty() {
             format!("the cover's helper ended with {status}")
         } else {

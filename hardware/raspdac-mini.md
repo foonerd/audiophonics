@@ -1,6 +1,6 @@
 # RaspDac Mini
 
-A streamer built around a Raspberry Pi, an ES9038Q2M DAC board, a 2.4 inch colour display and an infrared receiver.
+A streamer built around a Raspberry Pi, an ES9038Q2M DAC board, a 2.4 inch colour display and an infrared receiver. It is a kit: its case brings out the Raspberry Pi's rear ports and the DAC's RCA outputs at the back, and has the display, a start-up LED and the infrared receiver at the front. The Raspberry Pi's HDMI ports are inside the case.
 
 ## What the Raspberry Pi drives
 
