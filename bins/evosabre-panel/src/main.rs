@@ -33,6 +33,7 @@ mod orbit;
 mod render;
 mod scroll;
 mod segments;
+mod snake;
 mod ssd1322;
 mod text;
 
@@ -267,6 +268,8 @@ fn run(path: &str) -> Result<(), String> {
     let mut probe = Probe::default();
     let mut screen = layout::Playing::default();
     let mut selector = layout::Selector::default();
+    let mut snake = snake::Snake::at_this_moment();
+    let mut snaking = false;
     let mut source = levels::Source::new(TAP_TAG);
     let mut needles = meters::Meters::default();
     let mut metering = false;
@@ -432,14 +435,24 @@ fn run(path: &str) -> Result<(), String> {
             let (dx, dy) = orbit::offset(greeted_at.elapsed());
             frame.set_origin(dx, dy);
             let now = Instant::now();
-            let time = match selector.screen(now, &state, cfg.clock_after) {
-                layout::Screen::Playing => None,
-                layout::Screen::Clock => clock.now(),
+            let resting = selector.screen(now, &state, cfg.clock_after) == layout::Screen::Clock;
+            // A player at rest has the clock, or the snake where that is
+            // asked for; without the time of day the track stays.
+            snaking = resting && cfg.snake;
+            let time = if resting && !snaking {
+                clock.now()
+            } else {
+                None
             };
             drawn_at = now;
             screen.show_time(cfg.track_time);
             screen.unlit(cfg.clock_segments.level());
             match &time {
+                _ if snaking => {
+                    snake.tick(now);
+                    snake.draw(&mut frame);
+                    metering = false;
+                }
                 Some(t) => {
                     layout::clock(&mut frame, &state, &ip, t, cfg.clock_segments.level());
                     metering = false;
@@ -470,7 +483,7 @@ fn run(path: &str) -> Result<(), String> {
                     metering = false;
                 }
             }
-            moving = time.is_none() && screen.scrolling();
+            moving = time.is_none() && !snaking && screen.scrolling();
             if let Some(problem) = font.take_problem() {
                 error!("text: {problem}; lines beyond Latin-1 are drawn in the panel's own faces");
             }
@@ -488,6 +501,9 @@ fn run(path: &str) -> Result<(), String> {
         }
         if metering && !greeting_up && level != Level::Blank {
             wait = wait.min(METER_FRAME.saturating_sub(drawn_at.elapsed()));
+        }
+        if snaking && !greeting_up && level != Level::Blank {
+            wait = wait.min(snake.due_in(Instant::now()));
         }
         match rx.recv_timeout(wait) {
             Ok(first) => {

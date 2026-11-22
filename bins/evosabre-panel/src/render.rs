@@ -9,6 +9,7 @@ use crate::frame::{self, Frame};
 use crate::greeting;
 use crate::grey;
 use crate::layout::{self, Metered, Place, Playing};
+use crate::snake::{self, Snake};
 use audiophonics_base::clock::LocalTime;
 use audiophonics_meters::{self as meters, Bar};
 use audiophonics_player::State;
@@ -209,6 +210,17 @@ pub fn all(dir: &Path, cfg: &Config) -> Result<Vec<PathBuf>, String> {
     );
     shots.push(("clock".into(), frame));
 
+    // The snake, a few minutes into a game.
+    let mut snake = Snake::new(1);
+    let mut at = t0;
+    for _ in 0..1800 {
+        snake.tick(at);
+        at += snake::STEP;
+    }
+    let mut frame = Frame::new();
+    snake.draw(&mut frame);
+    shots.push(("snake".into(), frame));
+
     let mut written = Vec::new();
     for (name, frame) in shots {
         let path = dir.join(format!("{name}.pgm"));
@@ -231,7 +243,7 @@ mod tests {
             ..Config::default()
         };
         let files = all(&dir, &cfg).unwrap();
-        assert_eq!(files.len(), 31);
+        assert_eq!(files.len(), 32);
         for file in &files {
             let bytes = std::fs::read(file).unwrap();
             assert!(
