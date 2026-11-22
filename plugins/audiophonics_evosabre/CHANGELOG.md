@@ -2,6 +2,16 @@
 
 All notable changes to the Audiophonics Evo Sabre plugin are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0] - 2026-11-22
+
+A track time that can be read from across the room, the snake as a choice while the player rests, and a display that waits for the player to finish starting. Installing over 3.0.0 keeps your settings.
+
+- **Track time in four sizes.** *Track time* is now a choice of Off, Small, Medium, Large and Extra large. Small is the size the time had in 3.0.0, and what a player that had the time switched on now shows. Medium is a third taller and leaves the track's three lines as they are. Large and Extra large take the album's rows, so the artist and the album share a line; Extra large is drawn in segments, as the clock's digits are, and its unlit segments follow the clock's setting.
+- **The time beside lying meters.** *Meters: where they stand* has a second way for meters that lie under the track: the time played at their left and the track's length at their right, with the meters and the bar between the two. An Extra large time is always beside them; the other sizes can be under them, as before, or beside them.
+- **Snake me!**, a switch, off until you switch it on. While the player rests, a snake has the whole display in place of the clock. It plays by itself: it goes for a note, grows with each one it eats, and starts over when it has run out of room.
+- **Getting ready.** A player answers a display before it has finished starting. From the moment it answers until it says it is ready, the display says *Getting ready*, with a sign of life under the words, and it shows the track once the player is ready.
+- **The bar keeps its place through a track.** The time played is drawn as wide as the track's length. Before, the bar between them grew shorter when a track passed its tenth minute.
+
 ## [3.0.0] - 2026-11-14
 
 Version 3 is a rewrite. The display and the remote are now one small native program, in place of a Node application, a native add-on per Node version, lirc and irexec. Installing over version 2 removes its three services, releases the GPIO lines its display left taken, starts the new display and keeps the settings; restart the player afterwards to finish the update.
