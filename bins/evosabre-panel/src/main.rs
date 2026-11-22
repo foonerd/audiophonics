@@ -452,10 +452,11 @@ fn run(path: &str) -> Result<(), String> {
         if greeting_up && probe.state().is_some() && greeted_at.elapsed() >= cfg.greeting_hold {
             greeting_up = false;
         }
-        let waiting = !greeting_up && probe.state().is_some() && !gate.open();
+        let waiting = !greeting_up && gate.waiting(Instant::now());
         if waiting && level != Level::Blank {
-            // The player answers and has not finished starting: a word for
-            // it, and a sign of life.
+            // The player has not finished starting: a word for it, and a
+            // sign of life. A player busy with its start says nothing for a
+            // few seconds now and then, and the word stays through that.
             let mut frame = Frame::new();
             let (dx, dy) = orbit::offset(greeted_at.elapsed());
             frame.set_origin(dx, dy);
@@ -550,12 +551,12 @@ fn run(path: &str) -> Result<(), String> {
             wait = wait.min(snake.due_in(Instant::now()));
         }
         if let (true, Some(at)) = (probe.state().is_some(), gate.ask_at()) {
-            // Asked again when it is due, and the sign of life moved on.
-            let now = Instant::now();
-            wait = wait.min(at.saturating_duration_since(now));
-            if waiting && level != Level::Blank {
-                wait = wait.min(WAITING_STEP);
-            }
+            // Asked again when it is due.
+            wait = wait.min(at.saturating_duration_since(Instant::now()));
+        }
+        if waiting && level != Level::Blank {
+            // The sign of life moves on.
+            wait = wait.min(WAITING_STEP);
         }
         match rx.recv_timeout(wait) {
             Ok(first) => {
