@@ -89,7 +89,10 @@ const MEDIUM_COLON: [u32; 2] = [2, 5];
 /// The thirteen-row figures: seven segments two pixels thick in six
 /// columns, two columns between two figures. Thirteen rows leave an odd
 /// number between the top segment and the bottom one, so the middle
-/// segment is one row and the two halves match.
+/// segment is one row and the two halves match. The upright segments run
+/// to the top row and to the bottom one, where the clock's stop short: at
+/// this size a one or a four would otherwise be visibly shorter than the
+/// figures beside it.
 const SEGMENT_ROWS: u32 = 13;
 const SEGMENT_W: u32 = 6;
 const SEGMENT_T: u32 = 2;
@@ -221,20 +224,25 @@ fn seven(f: &mut Frame, x: u32, y: u32, digit: Option<u8>, lit: u8, unlit: u8) {
     let mid = SEGMENT_MIDDLE;
     let mask = digit.map_or(0, |d| segments::MASKS[usize::from(d.min(9))]);
     // Segments a to g, as the clock's: each its left column, its top row,
-    // its width and its height.
+    // its width and its height. An upright one shares its end with the
+    // segment across it.
     let boxes = [
         (1, 0, w - 2, t),
-        (w - t, t, t, mid - t),
-        (w - t, mid + 1, t, h - t - mid - 1),
+        (w - t, 0, t, mid),
+        (w - t, mid + 1, t, h - mid - 1),
         (1, h - t, w - 2, t),
-        (0, mid + 1, t, h - t - mid - 1),
-        (0, t, t, mid - t),
+        (0, mid + 1, t, h - mid - 1),
+        (0, 0, t, mid),
         (1, mid, w - 2, 1),
     ];
-    for (bit, (bx, by, bw, bh)) in boxes.into_iter().enumerate() {
-        let on = mask & (1 << bit) != 0;
-        if on || unlit > 0 {
-            block(f, x + bx, y + by, bw, bh, if on { lit } else { unlit });
+    // The unlit ones first: where two segments share pixels, the lit one
+    // has them.
+    for lit_ones in [false, true] {
+        for (bit, (bx, by, bw, bh)) in boxes.into_iter().enumerate() {
+            let on = mask & (1 << bit) != 0;
+            if on == lit_ones && (on || unlit > 0) {
+                block(f, x + bx, y + by, bw, bh, if on { lit } else { unlit });
+            }
         }
     }
 }
@@ -269,11 +277,8 @@ mod tests {
             let (lit, _) = extent(&f);
             assert_eq!(lit, (20..20 + rows).collect::<Vec<_>>(), "{size:?}");
             // Each figure alone fills those rows from the first to the last:
-            // but for a figure of segments that has no top or no bottom one.
+            // a one is as tall as an eight, in segments too.
             for d in 0..10 {
-                if size == Size::ExtraLarge && [1, 4, 7].contains(&d) {
-                    continue;
-                }
                 let mut f = Frame::new();
                 size.draw(&mut f, 10, 20, &d.to_string(), 9, 0);
                 let (lit, _) = extent(&f);
@@ -352,13 +357,35 @@ mod tests {
         // The two bars at the right are lit, two columns each.
         assert_eq!((f.get(4, 3), f.get(5, 3)), (9, 9));
         assert_eq!((f.get(4, 9), f.get(5, 9)), (9, 9));
+        // They run from the top row to the bottom one, with the one row
+        // of the waist between them.
+        assert_eq!((f.get(4, 0), f.get(5, 0)), (9, 9));
+        assert_eq!((f.get(4, 12), f.get(5, 12)), (9, 9));
+        assert_eq!(f.get(5, 6), 0);
         // The top, the middle, the bottom and the left are ghosts.
         assert_eq!(f.get(2, 0), 2);
         assert_eq!(f.get(2, 6), 2);
         assert_eq!(f.get(2, 12), 2);
-        assert_eq!((f.get(0, 3), f.get(0, 9)), (2, 2));
-        // The corners are no segment's.
-        assert_eq!((f.get(0, 0), f.get(5, 12)), (0, 0));
+        assert_eq!(
+            (f.get(0, 0), f.get(0, 3), f.get(0, 9), f.get(0, 12)),
+            (2, 2, 2, 2)
+        );
+
+        // Where a lit segment and an unlit one share pixels, they are lit:
+        // a seven's top runs to its second column though its left is dark.
+        let mut seven = Frame::new();
+        Size::ExtraLarge.draw(&mut seven, 0, 0, "7", 9, 2);
+        assert_eq!(
+            (seven.get(0, 0), seven.get(1, 0), seven.get(1, 1)),
+            (2, 9, 9)
+        );
+        assert_eq!(seven.get(1, 2), 2, "under the top, the left is a ghost");
+        // And a four is its left half, its waist and its right, top to bottom.
+        let mut four = Frame::new();
+        Size::ExtraLarge.draw(&mut four, 0, 0, "4", 9, 0);
+        assert_eq!((four.get(0, 0), four.get(0, 5), four.get(0, 7)), (9, 9, 0));
+        assert_eq!((four.get(5, 0), four.get(5, 12), four.get(2, 6)), (9, 9, 9));
+        assert_eq!((four.get(2, 0), four.get(2, 12)), (0, 0));
 
         // The middle segment is one row, and the halves either side match.
         let mut eight = Frame::new();
