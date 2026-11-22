@@ -22,6 +22,7 @@
 //! before it; the panel carries on without the remote meanwhile.
 
 mod config;
+mod figures;
 mod frame;
 mod greeting;
 mod grey;
@@ -437,6 +438,7 @@ fn run(path: &str) -> Result<(), String> {
             };
             drawn_at = now;
             screen.show_time(cfg.track_time);
+            screen.unlit(cfg.clock_segments.level());
             match &time {
                 Some(t) => {
                     layout::clock(&mut frame, &state, &ip, t, cfg.clock_segments.level());

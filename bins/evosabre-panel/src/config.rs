@@ -10,6 +10,7 @@
 //! named and leaves its default too: the panel comes up on a damaged store
 //! and says in the journal what was wrong with it.
 
+use crate::figures::Size;
 use crate::grey;
 use crate::layout::Place;
 use audiophonics_base::log::Level;
@@ -21,19 +22,30 @@ pub const DEFAULT_PATH: &str =
 const PLUGIN_DIR: &str = "/data/plugins/system_hardware/audiophonics_evo_sabre";
 
 /// Where the level meters stand when they are on: lying under the track,
-/// or upright at one side of it.
+/// with the time under them or beside them, or upright at one side of it.
 pub fn meter_place(s: &str) -> Option<Place> {
     match s.trim() {
         "horizontal" => Some(Place::Under),
+        "horizontal_beside" => Some(Place::Between),
         "vertical_left" => Some(Place::Left),
         "vertical_right" => Some(Place::Right),
         _ => None,
     }
 }
 
+/// How large the time of the track is drawn, as the settings name it:
+/// `Some(None)` is their word for leaving it out.
+pub fn time_size(s: &str) -> Option<Option<Size>> {
+    match s.trim() {
+        "off" => Some(None),
+        other => Size::parse(other).map(Some),
+    }
+}
+
 /// The segments of the clock's digits that are not lit: left dark, or
 /// drawn in one of the panel's three faintest greys, as the ghost of an LED
-/// digit.
+/// digit. The largest time of the track is drawn in such digits too, and
+/// follows it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Unlit {
     Off,
@@ -108,9 +120,12 @@ pub struct Config {
     pub meters: Option<Place>,
     /// Decibels added to what the meters show, -12 to 12.
     pub meters_gain: i8,
-    /// Whether the time row is drawn under the track: the time played,
-    /// the track's length and the bar between them.
-    pub track_time: bool,
+    /// The time played, the track's length and the bar between them: how
+    /// large their figures are, or `None` to leave all three out.
+    pub track_time: Option<Size>,
+    /// Whether the snake has the screen while the player rests, in place
+    /// of the clock.
+    pub snake: bool,
 
     /// Whether the handset's transport keys are obeyed.
     pub remote: bool,
@@ -147,7 +162,8 @@ impl Default for Config {
             clock_segments: Unlit::VeryFaint,
             meters: None,
             meters_gain: 0,
-            track_time: true,
+            track_time: Some(Size::Small),
+            snake: false,
 
             remote: true,
             log_level: Level::Error,
@@ -248,12 +264,28 @@ pub fn from_store(store: &Store) -> (Config, Vec<String>) {
         match meter_place(&v) {
             Some(p) => place = p,
             None => problems.push(format!(
-                "meters_style: not horizontal, vertical_left or vertical_right: {v}"
+                "meters_style: not horizontal, horizontal_beside, vertical_left or vertical_right: {v}"
             )),
         }
     }
-    match store.switch("track_time") {
-        Ok(Some(v)) => c.track_time = v,
+    // A store written before the time had sizes holds a switch and no
+    // size: on is the smallest, which is the size the time then had.
+    match store.text("track_time_size") {
+        Some(v) => match time_size(&v) {
+            Some(size) => c.track_time = size,
+            None => problems.push(format!(
+                "track_time_size: not off, small, medium, large or extra_large: {v}"
+            )),
+        },
+        None => match store.switch("track_time") {
+            Ok(Some(true)) => c.track_time = Some(Size::Small),
+            Ok(Some(false)) => c.track_time = None,
+            Ok(None) => {}
+            Err(e) => problems.push(e),
+        },
+    }
+    match store.switch("snake") {
+        Ok(Some(v)) => c.snake = v,
         Ok(None) => {}
         Err(e) => problems.push(e),
     }
@@ -314,7 +346,8 @@ mod tests {
         assert_eq!(c.clock_segments, Unlit::VeryFaint);
         assert_eq!(c.meters, None);
         assert_eq!(c.meters_gain, 0);
-        assert!(c.track_time);
+        assert_eq!(c.track_time, Some(Size::Small));
+        assert!(!c.snake);
         assert!(c.remote);
         assert_eq!(c.log_level, Level::Error);
         assert!(c
@@ -339,7 +372,9 @@ mod tests {
             "meters": { "type": "boolean", "value": true },
             "meters_style": { "type": "string", "value": "vertical_right" },
             "meters_gain": { "type": "number", "value": -6 },
-            "track_time": { "type": "boolean", "value": false },
+            "track_time": { "type": "boolean", "value": true },
+            "track_time_size": { "type": "string", "value": "extra_large" },
+            "snake": { "type": "boolean", "value": true },
             "log_level": { "type": "string", "value": "info" }
         }"#,
         )
@@ -354,7 +389,8 @@ mod tests {
         assert_eq!(c.clock_segments, Unlit::Off);
         assert_eq!(c.meters, Some(Place::Right));
         assert_eq!(c.meters_gain, -6);
-        assert!(!c.track_time);
+        assert_eq!(c.track_time, Some(Size::ExtraLarge));
+        assert!(c.snake);
         assert_eq!(c.log_level, Level::Info);
         assert_eq!(c.dc_gpio, 27, "a key that is absent leaves its default");
     }
@@ -444,5 +480,66 @@ mod tests {
         let (c, problems) = from_store(&loud);
         assert_eq!(c.meters_gain, 0, "a gain out of range leaves none");
         assert!(problems.iter().any(|p| p.starts_with("meters_gain:")));
+
+        let beside = Store::parse(
+            r#"{ "meters": { "type": "boolean", "value": true },
+                 "meters_style": { "type": "string", "value": "horizontal_beside" } }"#,
+        )
+        .unwrap();
+        assert_eq!(from_store(&beside).0.meters, Some(Place::Between));
+    }
+
+    fn time_of(store: &str) -> (Option<Size>, Vec<String>) {
+        let (c, problems) = from_store(&Store::parse(store).unwrap());
+        (c.track_time, problems)
+    }
+
+    #[test]
+    fn the_time_is_the_size_asked_for_and_off_leaves_it_out() {
+        for (word, size) in [
+            ("small", Some(Size::Small)),
+            ("medium", Some(Size::Medium)),
+            ("large", Some(Size::Large)),
+            ("extra_large", Some(Size::ExtraLarge)),
+            ("off", None),
+        ] {
+            let store =
+                format!(r#"{{ "track_time_size": {{ "type": "string", "value": "{word}" }} }}"#);
+            assert_eq!(time_of(&store), (size, vec![]), "{word}");
+        }
+        let (size, problems) =
+            time_of(r#"{ "track_time_size": { "type": "string", "value": "huge" } }"#);
+        assert_eq!(size, Some(Size::Small), "a size not known leaves the first");
+        assert!(problems.iter().any(|p| p.starts_with("track_time_size:")));
+    }
+
+    #[test]
+    fn a_store_from_before_the_sizes_keeps_its_time_as_it_was() {
+        // The switch alone: on is the size the time then had, off is off.
+        assert_eq!(
+            time_of(r#"{ "track_time": { "type": "boolean", "value": true } }"#).0,
+            Some(Size::Small)
+        );
+        assert_eq!(
+            time_of(r#"{ "track_time": { "type": "boolean", "value": false } }"#).0,
+            None
+        );
+        // Once a size is stored it is the word, whatever the switch says.
+        assert_eq!(
+            time_of(
+                r#"{ "track_time": { "type": "boolean", "value": false },
+                     "track_time_size": { "type": "string", "value": "large" } }"#
+            )
+            .0,
+            Some(Size::Large)
+        );
+        assert_eq!(
+            time_of(
+                r#"{ "track_time": { "type": "boolean", "value": true },
+                     "track_time_size": { "type": "string", "value": "off" } }"#
+            )
+            .0,
+            None
+        );
     }
 }

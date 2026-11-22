@@ -15,7 +15,7 @@ const COLON_W: u32 = T;
 
 /// Segments a to g as bits 0 to 6: a top, b upper right, c lower right,
 /// d bottom, e lower left, f upper left, g middle.
-const MASKS: [u8; 10] = [
+pub const MASKS: [u8; 10] = [
     0b0111111, // 0: a b c d e f
     0b0000110, // 1: b c
     0b1011011, // 2: a b d e g

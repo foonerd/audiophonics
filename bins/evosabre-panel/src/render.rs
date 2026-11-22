@@ -4,6 +4,7 @@
 //! shows.
 
 use crate::config::Config;
+use crate::figures::Size;
 use crate::frame::{self, Frame};
 use crate::greeting;
 use crate::grey;
@@ -47,13 +48,13 @@ pub fn all(dir: &Path, cfg: &Config) -> Result<Vec<PathBuf>, String> {
     std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let mut font = Unifont::new(&cfg.unifont_path);
     let t0 = Instant::now();
-    let mut shots: Vec<(&str, Frame)> = Vec::new();
+    let mut shots: Vec<(String, Frame)> = Vec::new();
 
     let (frame, _) = greeting::load(cfg);
-    shots.push(("greeting", frame));
-    shots.push(("greeting-text", greeting::text(&cfg.greeting_text)));
-    shots.push(("farewell", greeting::text(&cfg.farewell_text)));
-    shots.push(("restart", greeting::text(&cfg.restart_text)));
+    shots.push(("greeting".into(), frame));
+    shots.push(("greeting-text".into(), greeting::text(&cfg.greeting_text)));
+    shots.push(("farewell".into(), greeting::text(&cfg.farewell_text)));
+    shots.push(("restart".into(), greeting::text(&cfg.restart_text)));
 
     let mut paused = playing();
     paused.status = "pause".into();
@@ -113,7 +114,7 @@ pub fn all(dir: &Path, cfg: &Config) -> Result<Vec<PathBuf>, String> {
             frame = Frame::new();
             screen.render(&mut frame, state, ADDRESS, t0 + after, &mut font, None);
         }
-        shots.push((name, frame));
+        shots.push((name.into(), frame));
     }
 
     // The meters: a loud passage on the left, a quieter one on the right.
@@ -138,21 +139,57 @@ pub fn all(dir: &Path, cfg: &Config) -> Result<Vec<PathBuf>, String> {
         let mut frame = Frame::new();
         let meters = Metered { bars: &bars, place };
         screen.render(&mut frame, &playing(), ADDRESS, t0, &mut font, Some(meters));
-        shots.push((name, frame));
+        shots.push((name.into(), frame));
+    }
+
+    // The time at each size, in each place it can have: without meters,
+    // under lying meters, beside them, and beside upright ones. The
+    // smallest is the screens above, but for beside lying meters; the
+    // largest does not fit under lying meters and stands beside them.
+    let mut over_an_hour = playing();
+    over_an_hour.duration = Some(3753);
+    over_an_hour.seek = Some(2_467_000);
+    for (size, name) in [
+        (Size::Small, "small"),
+        (Size::Medium, "medium"),
+        (Size::Large, "large"),
+        (Size::ExtraLarge, "extra-large"),
+    ] {
+        for (place, place_name, state) in [
+            (None, "", &playing()),
+            (Some(Place::Under), "-under", &playing()),
+            (Some(Place::Between), "-beside", &playing()),
+            (Some(Place::Right), "-upright", &playing()),
+            (Some(Place::Between), "-beside-over-an-hour", &over_an_hour),
+        ] {
+            let shown_above = size == Size::Small && place != Some(Place::Between);
+            let stands_beside = size == Size::ExtraLarge && place == Some(Place::Under);
+            let one_long_enough = size != Size::ExtraLarge && state.duration == Some(3753);
+            if shown_above || stands_beside || one_long_enough {
+                continue;
+            }
+            let mut screen = Playing::default();
+            screen.show_time(Some(size));
+            screen.unlit(cfg.clock_segments.level());
+            let mut frame = Frame::new();
+            let meters = place.map(|place| Metered { bars: &bars, place });
+            screen.render(&mut frame, state, ADDRESS, t0, &mut font, meters);
+            shots.push((format!("time-{name}{place_name}"), frame));
+        }
     }
     // Without the time row: the track alone, and the meters grown into it.
     let mut screen = Playing::default();
-    screen.show_time(false);
+    screen.show_time(None);
     let mut frame = Frame::new();
     screen.render(&mut frame, &playing(), ADDRESS, t0, &mut font, None);
-    shots.push(("playing-no-time", frame));
+    shots.push(("playing-no-time".into(), frame));
     let mut frame = Frame::new();
     let meters = Metered {
         bars: &bars,
         place: Place::Under,
     };
     screen.render(&mut frame, &playing(), ADDRESS, t0, &mut font, Some(meters));
-    shots.push(("meters-no-time", frame));
+    shots.push(("meters-no-time".into(), frame));
 
     let mut frame = Frame::new();
     let wednesday = LocalTime {
@@ -170,7 +207,7 @@ pub fn all(dir: &Path, cfg: &Config) -> Result<Vec<PathBuf>, String> {
         &wednesday,
         crate::config::Unlit::Faint.level(),
     );
-    shots.push(("clock", frame));
+    shots.push(("clock".into(), frame));
 
     let mut written = Vec::new();
     for (name, frame) in shots {
@@ -194,7 +231,7 @@ mod tests {
             ..Config::default()
         };
         let files = all(&dir, &cfg).unwrap();
-        assert_eq!(files.len(), 18);
+        assert_eq!(files.len(), 31);
         for file in &files {
             let bytes = std::fs::read(file).unwrap();
             assert!(
