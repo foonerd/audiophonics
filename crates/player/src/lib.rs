@@ -4,6 +4,7 @@
 //! map, is about a player in the abstract. Everything below it is about
 //! Volumio specifically.
 
+pub mod gate;
 mod http;
 pub mod probe;
 pub mod volumio;

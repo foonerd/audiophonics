@@ -1,9 +1,11 @@
 //! evosabre-panel: the EVO Sabre's second display and its remote.
 //!
 //! Start: open the display, show the greeting, find the infrared receiver.
-//! Then, for as long as the process lives: poll the player at the panel's
-//! interval, take a button the moment it arrives, and redraw when either
-//! changed anything. Every change of player state, every button and every
+//! The greeting stays until the player answers; a player that answers and
+//! has not finished starting is waited for, with a word that says so, and
+//! the track is shown once it says it is ready. Then, for as long as the
+//! process lives: poll the player at the panel's interval, take a button
+//! the moment it arrives, and redraw when either changed anything. Every change of player state, every button and every
 //! outage goes to the journal once, so the unit can be checked from a
 //! terminal as well as from the glass.
 //!
@@ -41,6 +43,7 @@ use audiophonics_base::clock::Clock;
 use audiophonics_base::idle::{Idle, Level, Playing};
 use audiophonics_base::{board, debug, error, info, leaving as farewell, log, net};
 use audiophonics_meters::{self as meters, levels};
+use audiophonics_player::gate::{self, Gate, Opened};
 use audiophonics_player::probe::{Probe, Report};
 use audiophonics_player::{Player, Volumio};
 use audiophonics_remote::watch::{self, Watch};
@@ -81,6 +84,8 @@ const SCROLL_FRAME: Duration = Duration::from_millis(1000 / scroll::SPEED as u64
 /// A frame of the meters: twenty-five a second, from the start of one to
 /// the start of the next.
 const METER_FRAME: Duration = Duration::from_millis(40);
+/// How often the sign of life moves on while the player is waited for.
+const WAITING_STEP: Duration = Duration::from_millis(500);
 /// How often the address is looked up again, in polls.
 const ADDRESS_EVERY: u32 = 10;
 /// How often the time zone is read again, in polls: it may be changed while
@@ -266,6 +271,9 @@ fn run(path: &str) -> Result<(), String> {
 
     let mut volumio = Volumio::new(cfg.player_base.clone(), cfg.request_timeout);
     let mut probe = Probe::default();
+    // A player that answers is not shown until it says it has finished
+    // starting: see `gate`.
+    let mut gate = Gate::new(greeted_at);
     let mut screen = layout::Playing::default();
     let mut selector = layout::Selector::default();
     let mut snake = snake::Snake::at_this_moment();
@@ -404,6 +412,25 @@ fn run(path: &str) -> Result<(), String> {
             }
             next_poll = now + cfg.poll_interval;
         }
+        // A player that answers has not finished starting until it says
+        // so. It is asked until it does; one that went is asked afresh
+        // when it is back.
+        if probe.state().is_none() {
+            gate.shut(now);
+        } else if gate.due(now) {
+            match gate.heard(volumio.readiness().ok(), now) {
+                Some(Opened::Ready) => info!("player: ready"),
+                Some(Opened::Unsaid) => {
+                    info!("player: it has no word for whether it is ready, and is not waited for");
+                }
+                Some(Opened::Failed) => error!("player: it says its start failed"),
+                Some(Opened::GaveUp) => error!(
+                    "player: still starting after {} s, and not waited for any longer",
+                    gate::LONGEST.as_secs()
+                ),
+                None => {}
+            }
+        }
 
         let wanted = idle.level(Instant::now());
         if wanted != level {
@@ -424,7 +451,23 @@ fn run(path: &str) -> Result<(), String> {
         if greeting_up && probe.state().is_some() && greeted_at.elapsed() >= cfg.greeting_hold {
             greeting_up = false;
         }
-        if !greeting_up && level != Level::Blank {
+        let waiting = !greeting_up && probe.state().is_some() && !gate.open();
+        if waiting && level != Level::Blank {
+            // The player answers and has not finished starting: a word for
+            // it, and a sign of life.
+            let mut frame = Frame::new();
+            let (dx, dy) = orbit::offset(greeted_at.elapsed());
+            frame.set_origin(dx, dy);
+            let step = greeted_at.elapsed().as_millis() / WAITING_STEP.as_millis();
+            greeting::waiting(&mut frame, &cfg.ready_text, step as u32);
+            metering = false;
+            moving = false;
+            snaking = false;
+            if frame != shown {
+                panel.flush(&frame).map_err(display)?;
+                shown = frame;
+            }
+        } else if !greeting_up && level != Level::Blank {
             let mut state = probe.state().cloned().unwrap_or_default();
             if probe.state().is_some() && state.status.is_empty() {
                 // The player answered without a status, as it does for a
@@ -504,6 +547,14 @@ fn run(path: &str) -> Result<(), String> {
         }
         if snaking && !greeting_up && level != Level::Blank {
             wait = wait.min(snake.due_in(Instant::now()));
+        }
+        if let (true, Some(at)) = (probe.state().is_some(), gate.ask_at()) {
+            // Asked again when it is due, and the sign of life moved on.
+            let now = Instant::now();
+            wait = wait.min(at.saturating_duration_since(now));
+            if waiting && level != Level::Blank {
+                wait = wait.min(WAITING_STEP);
+            }
         }
         match rx.recv_timeout(wait) {
             Ok(first) => {

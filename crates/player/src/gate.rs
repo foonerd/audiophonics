@@ -10,7 +10,7 @@
 //! waited for: there is nothing to wait on. One that goes on saying it is
 //! starting is waited for only so long.
 
-use audiophonics_player::Readiness;
+use crate::Readiness;
 use std::time::{Duration, Instant};
 
 /// How often the player is asked while it has not said it is ready.

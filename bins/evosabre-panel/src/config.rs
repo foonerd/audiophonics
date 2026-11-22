@@ -104,6 +104,8 @@ pub struct Config {
     /// What the panel says on a halt, and on a restart.
     pub farewell_text: String,
     pub restart_text: String,
+    /// What it says while a player that answers has not finished starting.
+    pub ready_text: String,
     /// GNU Unifont as a `.hex` file, for text the panel's own faces lack.
     pub unifont_path: String,
 
@@ -154,6 +156,7 @@ impl Default for Config {
             logo_path: format!("{PLUGIN_DIR}/assets/logo.pgm"),
             farewell_text: "Goodbye".into(),
             restart_text: "Back in a moment".into(),
+            ready_text: "Getting ready".into(),
             unifont_path: format!("{PLUGIN_DIR}/assets/unifont.hex"),
 
             dim_after: Duration::from_secs(1200),
@@ -314,6 +317,7 @@ pub fn from_store(store: &Store) -> (Config, Vec<String>) {
         ("logo_path", &mut c.logo_path),
         ("farewell_text", &mut c.farewell_text),
         ("restart_text", &mut c.restart_text),
+        ("ready_text", &mut c.ready_text),
         ("unifont_path", &mut c.unifont_path),
     ] {
         if let Some(v) = store.text(key) {

@@ -56,6 +56,9 @@ pub fn all(dir: &Path, cfg: &Config) -> Result<Vec<PathBuf>, String> {
     shots.push(("greeting-text".into(), greeting::text(&cfg.greeting_text)));
     shots.push(("farewell".into(), greeting::text(&cfg.farewell_text)));
     shots.push(("restart".into(), greeting::text(&cfg.restart_text)));
+    let mut frame = Frame::new();
+    greeting::waiting(&mut frame, &cfg.ready_text, 1);
+    shots.push(("getting-ready".into(), frame));
 
     let mut paused = playing();
     paused.status = "pause".into();
@@ -243,7 +246,7 @@ mod tests {
             ..Config::default()
         };
         let files = all(&dir, &cfg).unwrap();
-        assert_eq!(files.len(), 32);
+        assert_eq!(files.len(), 33);
         for file in &files {
             let bytes = std::fs::read(file).unwrap();
             assert!(
