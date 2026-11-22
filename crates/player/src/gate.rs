@@ -13,6 +13,11 @@
 //! A player busy with its start now and then answers nothing for a few
 //! seconds. It is still starting, and is taken to be for a while after it
 //! was last heard from: see [`Gate::waiting`].
+//!
+//! A player can be stopped and started again faster than it is given up
+//! for gone. One that was ready and then misses a question is therefore
+//! asked again where it is, and waited for if it is starting: see
+//! [`Gate::doubt`].
 
 use crate::Readiness;
 use std::time::{Duration, Instant};
@@ -47,6 +52,9 @@ pub struct Gate {
     ask_at: Instant,
     /// When a player that had not finished starting was last heard from.
     starting_at: Option<Instant>,
+    /// The player was ready when last asked and has missed a question
+    /// since: it is asked again.
+    doubted: bool,
 }
 
 impl Gate {
@@ -56,6 +64,7 @@ impl Gate {
             since: None,
             ask_at: now,
             starting_at: None,
+            doubted: false,
         }
     }
 
@@ -68,8 +77,19 @@ impl Gate {
     /// The player went: the next one that answers is waited for afresh.
     pub fn shut(&mut self, now: Instant) {
         self.open = false;
+        self.doubted = false;
         self.since = None;
         self.ask_at = now;
+    }
+
+    /// The player missed a question. If it was ready, it may be another
+    /// start of it that answers next, so it is asked where it is; until it
+    /// says, it is taken to be ready still.
+    pub fn doubt(&mut self, now: Instant) {
+        if self.open && !self.doubted {
+            self.doubted = true;
+            self.ask_at = now;
+        }
     }
 
     /// True while a player is being waited for: one that answers and has
@@ -86,18 +106,35 @@ impl Gate {
 
     /// True when the player is to be asked where it is.
     pub fn due(&self, now: Instant) -> bool {
-        !self.open && now >= self.ask_at
+        (!self.open || self.doubted) && now >= self.ask_at
     }
 
-    /// When the player is next asked, while the gate is shut.
+    /// When the player is next asked, while there is something to ask it.
     pub fn ask_at(&self) -> Option<Instant> {
-        (!self.open).then_some(self.ask_at)
+        (!self.open || self.doubted).then_some(self.ask_at)
     }
 
     /// What the player said of itself, or `None` where it gave no answer.
     /// Returns how the gate opened, if this opened it.
     pub fn heard(&mut self, said: Option<Readiness>, now: Instant) -> Option<Opened> {
         if self.open {
+            if self.doubted {
+                self.ask_at = now + ASK_EVERY;
+                match said {
+                    // It has started afresh, and is waited for as any
+                    // player that is starting.
+                    Some(Readiness::Starting) => {
+                        self.open = false;
+                        self.doubted = false;
+                        self.since = Some(now);
+                        self.starting_at = Some(now);
+                    }
+                    // Nothing said: asked again.
+                    None => {}
+                    // Ready as it was, or nothing to wait on.
+                    Some(_) => self.doubted = false,
+                }
+            }
             return None;
         }
         let since = *self.since.get_or_insert(now);
@@ -261,6 +298,78 @@ mod tests {
             Some(Opened::GaveUp)
         );
         assert!(!gate.waiting(t0 + LONGEST));
+    }
+
+    #[test]
+    fn a_ready_player_that_misses_a_question_is_asked_again_and_waited_for_if_it_is_starting() {
+        let t0 = Instant::now();
+        let mut gate = Gate::new(t0);
+        gate.heard(Some(Readiness::Ready), t0);
+        assert!(!gate.due(t0 + SECOND * 30), "ready: nothing to ask");
+
+        // It misses a question: asked at once, and ready still meanwhile.
+        let missed = t0 + SECOND * 30;
+        gate.doubt(missed);
+        assert!(gate.open() && gate.due(missed));
+        assert_eq!(gate.ask_at(), Some(missed));
+        // No answer: asked again a second on, and again.
+        assert_eq!(gate.heard(None, missed), None);
+        assert!(gate.open() && !gate.due(missed + SECOND / 2) && gate.due(missed + SECOND));
+        // Another miss meanwhile does not bring the question forward.
+        gate.doubt(missed + SECOND / 2);
+        assert!(!gate.due(missed + SECOND / 2));
+        assert_eq!(gate.heard(None, missed + SECOND), None);
+
+        // It answers that it is starting: it is another start of it.
+        let back = missed + SECOND * 2;
+        assert_eq!(gate.heard(Some(Readiness::Starting), back), None);
+        assert!(!gate.open());
+        assert!(gate.waiting(back));
+        assert!(gate.due(back + SECOND));
+        // Waited for as any other, and for no longer than any other.
+        assert_eq!(
+            gate.heard(Some(Readiness::Starting), back + LONGEST - SECOND),
+            None
+        );
+        assert_eq!(
+            gate.heard(Some(Readiness::Ready), back + LONGEST - SECOND / 2),
+            Some(Opened::Ready)
+        );
+        assert!(gate.open() && !gate.due(back + LONGEST));
+    }
+
+    #[test]
+    fn a_ready_player_that_was_only_slow_stays_ready_and_nothing_is_said() {
+        let t0 = Instant::now();
+        for said in [Readiness::Ready, Readiness::Unsaid, Readiness::Failed] {
+            let mut gate = Gate::new(t0);
+            gate.heard(Some(Readiness::Ready), t0);
+            gate.doubt(t0 + SECOND);
+            assert_eq!(gate.heard(Some(said), t0 + SECOND), None, "{said:?}");
+            assert!(gate.open());
+            assert!(!gate.waiting(t0 + SECOND));
+            // Settled: nothing more is asked until it misses another.
+            assert!(!gate.due(t0 + SECOND * 60));
+            assert_eq!(gate.ask_at(), None);
+        }
+        // A player that is waited for cannot be doubted: it is asked anyway.
+        let mut gate = Gate::new(t0);
+        gate.heard(Some(Readiness::Starting), t0);
+        gate.doubt(t0 + SECOND / 2);
+        assert!(
+            !gate.due(t0 + SECOND / 2),
+            "its next question keeps its time"
+        );
+        // One that went takes its doubt with it.
+        let mut gate = Gate::new(t0);
+        gate.heard(Some(Readiness::Ready), t0);
+        gate.doubt(t0 + SECOND);
+        gate.shut(t0 + SECOND * 2);
+        assert_eq!(
+            gate.heard(Some(Readiness::Ready), t0 + SECOND * 3),
+            Some(Opened::Ready),
+            "asked afresh, and said"
+        );
     }
 
     #[test]

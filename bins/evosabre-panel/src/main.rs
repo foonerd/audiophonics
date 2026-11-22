@@ -397,7 +397,13 @@ fn run(path: &str) -> Result<(), String> {
             status.receiver(remote.line());
         }
         if now >= next_poll {
-            match probe.observe(volumio.state()) {
+            let polled = volumio.state();
+            if polled.is_err() {
+                // A player that misses a question may be one that has
+                // been started again, faster than it is given up for gone.
+                gate.doubt(now);
+            }
+            match probe.observe(polled) {
                 Some(Report::Changed(line)) => info!("{line}"),
                 Some(Report::Outage(line)) => error!("{line}"),
                 None => {}
@@ -419,7 +425,12 @@ fn run(path: &str) -> Result<(), String> {
         if probe.state().is_none() {
             gate.shut(now);
         } else if gate.due(now) {
-            match gate.heard(volumio.readiness().ok(), now) {
+            let was_ready = gate.open();
+            let opened = gate.heard(volumio.readiness().ok(), now);
+            if was_ready && !gate.open() {
+                info!("player: starting again");
+            }
+            match opened {
                 Some(Opened::Ready) => info!("player: ready"),
                 Some(Opened::Unsaid) => {
                     info!("player: it has no word for whether it is ready, and is not waited for");
