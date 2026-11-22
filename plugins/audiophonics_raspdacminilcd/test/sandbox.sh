@@ -252,26 +252,51 @@ echo "ok: the helper turns the block from one driver to the other and back, and 
 # --- the service alone is stopped. --------------------------------------------
 printf '#!/bin/sh\ncat /tmp/jobs\n' > /tmp/systemctl-jobs
 chmod +x /tmp/systemctl-jobs
-sh -c 'trap "echo USR1 > /tmp/told" USR1; trap "echo USR2 > /tmp/told" USR2; while :; do sleep 0.05; done' &
+# The sleep on the path only writes down that it was asked for, which is
+# what the installer's waits are checked by. What is waited for here is
+# real, so this asks for the system's own.
+NAP=/bin/sleep
+rm -f /tmp/ready
+sh -c 'trap "echo USR1 > /tmp/told" USR1; trap "echo USR2 > /tmp/told" USR2; : > /tmp/ready; while :; do /bin/sleep 0.05; done' &
 program=$!
+# It is told nothing before it can hear: a signal that came before its
+# traps were set would end it.
+waited=0
+until [ -e /tmp/ready ]; do
+  [ "$waited" -lt 100 ] || fail "leaving: the stand-in for the display's program did not start"
+  "$NAP" 0.05
+  waited=$((waited + 1))
+done
+# What the stand-in was told once the helper had run against these jobs: a
+# signal's name, or "nothing". A signal that is expected is waited for;
+# where none is, one is given the time it would take to arrive.
 told() {
   rm -f /tmp/told
   printf '%s\n' "$1" > /tmp/jobs
   RASPDACMINI_SYSTEMCTL=/tmp/systemctl-jobs "$LEAVING" "$program" || fail "leaving: the helper failed"
-  sleep 0.3
+  case "$2" in
+    nothing) "$NAP" 0.3 ;;
+    *)
+      waited=0
+      while [ ! -s /tmp/told ] && [ "$waited" -lt 100 ]; do
+        "$NAP" 0.05
+        waited=$((waited + 1))
+      done
+      ;;
+  esac
   cat /tmp/told 2> /dev/null || echo nothing
 }
 [ "$(told '   812 reboot.target                start waiting
    813 raspdacmini-panel.service    stop  running
-   814 systemd-reboot.service       start waiting')" = USR2 ] || fail "leaving: a restart was not told as one"
-[ "$(told '    90 poweroff.target start waiting')" = USR1 ] || fail "leaving: a power-off was not told as one"
-[ "$(told '    91 halt.target start waiting')" = USR1 ] || fail "leaving: a halt was not told as a power-off"
-[ "$(told '    92 kexec.target start waiting')" = USR2 ] || fail "leaving: a kexec was not told as a restart"
-[ "$(told '   813 raspdacmini-panel.service stop running')" = nothing ] || fail "leaving: a stop of the service alone was told as the system going down"
-[ "$(told '    95 reboot.target stop waiting')" = nothing ] || fail "leaving: a target being stopped was taken for one being started"
-[ "$(told '')" = nothing ] || fail "leaving: no jobs at all was told as something"
+   814 systemd-reboot.service       start waiting' USR2)" = USR2 ] || fail "leaving: a restart was not told as one"
+[ "$(told '    90 poweroff.target start waiting' USR1)" = USR1 ] || fail "leaving: a power-off was not told as one"
+[ "$(told '    91 halt.target start waiting' USR1)" = USR1 ] || fail "leaving: a halt was not told as a power-off"
+[ "$(told '    92 kexec.target start waiting' USR2)" = USR2 ] || fail "leaving: a kexec was not told as a restart"
+[ "$(told '   813 raspdacmini-panel.service stop running' nothing)" = nothing ] || fail "leaving: a stop of the service alone was told as the system going down"
+[ "$(told '    95 reboot.target stop waiting' nothing)" = nothing ] || fail "leaving: a target being stopped was taken for one being started"
+[ "$(told '' nothing)" = nothing ] || fail "leaving: no jobs at all was told as something"
 printf '#!/bin/sh\nexit 1\n' > /tmp/systemctl-jobs
-[ "$(told '   812 reboot.target start waiting')" = nothing ] || fail "leaving: a systemd that does not answer was taken for an answer"
+[ "$(told '   812 reboot.target start waiting' nothing)" = nothing ] || fail "leaving: a systemd that does not answer was taken for an answer"
 "$LEAVING" "not a number" || fail "leaving: a PID that is none made the helper fail"
 "$LEAVING" || fail "leaving: no PID made the helper fail"
 kill "$program" 2> /dev/null || true
