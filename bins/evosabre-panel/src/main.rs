@@ -5,9 +5,10 @@
 //! has not finished starting is waited for, with a word that says so, and
 //! the track is shown once it says it is ready. Then, for as long as the
 //! process lives: poll the player at the panel's interval, take a button
-//! the moment it arrives, and redraw when either changed anything. Every change of player state, every button and every
-//! outage goes to the journal once, so the unit can be checked from a
-//! terminal as well as from the glass.
+//! the moment it arrives, and redraw when either changed anything. Every
+//! change of player state, every button and every outage goes to the
+//! journal once, so the unit can be checked from a terminal as well as
+//! from the glass.
 //!
 //! Brightness follows use: full after a button or when playback starts, dim
 //! after `dim_after`, dark after `blank_after` while nothing plays. On
