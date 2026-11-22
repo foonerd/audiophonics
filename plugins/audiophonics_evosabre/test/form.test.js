@@ -47,13 +47,58 @@ test('stored values fill the page and a key the store lacks leaves the page its 
     assert.equal(find('remote_active').value, true);
 });
 
-// What a player has before anything is set: the track with its time row,
-// and nothing put into its audio path.
-test('a first install shows the track time, and has the meters and click prevention off', () => {
-    assert.equal(defaults.track_time.value, true);
+// What a player has before anything is set: the track with its time at the
+// size it has always had, the clock while it rests, and nothing put into
+// its audio path.
+test('a first install shows the track time at its smallest, and has the meters, the snake and click prevention off', () => {
+    assert.equal(defaults.track_time_size.value, 'small');
     assert.equal(defaults.meters.value, false);
+    assert.equal(defaults.meters_style.value, 'horizontal');
+    assert.equal(defaults.snake.value, false);
     assert.equal(defaults.click_prevention.value, false);
     assert.equal(defaults.oled_active.value, true);
+});
+
+test('the track time is saved as a size, and the switch it once was is kept in step', () => {
+    for (const size of ['small', 'medium', 'large', 'extra_large']) {
+        assert.deepEqual(form.take({ track_time_size: { value: size, label: 'x' } }, ['track_time_size']),
+            { values: { track_time_size: size, track_time: true } }, size);
+    }
+    assert.deepEqual(form.take({ track_time_size: 'off' }, ['track_time_size']), { values: { track_time_size: 'off', track_time: false } });
+    assert.deepEqual(form.take({ track_time_size: 'huge' }, ['track_time_size']), { values: {} }, 'a size not known stores nothing');
+    assert.deepEqual(form.take({ meters_style: 'horizontal_beside', snake: true }, ['meters_style', 'snake']),
+        { values: { meters_style: 'horizontal_beside', snake: true } });
+});
+
+test('a store from before the track time had sizes shows its time as it was', () => {
+    const page = (store) => {
+        const filled = form.fill(JSON.parse(JSON.stringify(uiconf)), form.stored((key) => store[key]));
+        return filled.sections.flatMap((s) => s.content).filter((e) => e.id === 'track_time_size')[0].value;
+    };
+    assert.deepEqual(page({ track_time: false }), { value: 'off', label: 'TRANSLATE.EVOSABRE.TRACK_TIME_OFF' });
+    assert.deepEqual(page({ track_time: 'false' }), { value: 'off', label: 'TRANSLATE.EVOSABRE.TRACK_TIME_OFF' });
+    assert.deepEqual(page({ track_time: true }), { value: 'small', label: 'TRANSLATE.EVOSABRE.TRACK_TIME_SMALL' });
+    assert.equal(page({}).value, 'small', 'neither stored: the default');
+    // Once a size is stored it is what the page shows, whatever the switch says.
+    assert.equal(page({ track_time: false, track_time_size: 'large' }).value, 'large');
+    assert.equal(page({ track_time: true, track_time_size: 'off' }).value, 'off');
+    // No other key is read through another.
+    const get = form.stored((key) => ({ track_time: false })[key]);
+    assert.equal(get('contrast'), undefined);
+    assert.equal(get('track_time'), false);
+});
+
+test('every choice of a select on the page is one the check keeps, and the reverse', () => {
+    const selects = uiconf.sections.flatMap((s) => s.content).filter((e) => e.element === 'select');
+    assert.ok(selects.length >= 4);
+    for (const select of selects) {
+        for (const option of select.options) {
+            const kept = form.take({ [select.id]: option }, [select.id]).values[select.id];
+            assert.equal(kept, option.value, select.id + ': ' + option.value);
+        }
+        assert.equal(form.take({ [select.id]: 'no such choice' }, [select.id]).values[select.id], undefined, select.id);
+        assert.ok(select.options.some((o) => o.value === select.value.value && o.label === select.value.label), select.id + ': its default is one of its choices');
+    }
 });
 
 test('the page, the store and the checks agree on every setting', () => {
