@@ -2,7 +2,7 @@
 
 All notable changes to the Audiophonics Evo Sabre plugin are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.2.0] - 2026-11-23
+## [3.1.1] - 2026-11-23
 
 A choice of digits for the Extra large track time. Restart the player after updating.
 
