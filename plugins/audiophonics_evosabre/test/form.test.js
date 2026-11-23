@@ -70,6 +70,22 @@ test('the track time is saved as a size, and the switch it once was is kept in s
         { values: { meters_style: 'horizontal_beside', snake: true } });
 });
 
+// The choice of digits belongs to the largest size: it stands straight
+// after the size on the page, and is there only while that size is chosen.
+test('the digits of the largest track time are chosen straight after its size, and only for that size', () => {
+    const display = uiconf.sections.filter((s) => s.id === 'section_display')[0].content;
+    const ids = display.map((e) => e.id);
+    assert.equal(ids.indexOf('track_time_face'), ids.indexOf('track_time_size') + 1);
+    const face = display[ids.indexOf('track_time_face')];
+    const size = display[ids.indexOf('track_time_size')];
+    assert.deepEqual(face.visibleIf, { field: 'track_time_size', value: 'extra_large' });
+    assert.ok(size.options.some((o) => o.value === face.visibleIf.value), 'the size it waits for is one the page offers');
+    assert.deepEqual(face.options.map((o) => o.value), ['segments', 'light', 'bold']);
+    assert.equal(defaults.track_time_face.value, 'segments', 'as the largest time was before it had a choice');
+    assert.deepEqual(form.take({ track_time_size: 'extra_large', track_time_face: { value: 'light', label: 'x' } }, ['track_time_size', 'track_time_face']),
+        { values: { track_time_size: 'extra_large', track_time_face: 'light', track_time: true } });
+});
+
 test('a store from before the track time had sizes shows its time as it was', () => {
     const page = (store) => {
         const filled = form.fill(JSON.parse(JSON.stringify(uiconf)), form.stored((key) => store[key]));
