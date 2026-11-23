@@ -66,6 +66,18 @@ mod tests {
         let listener = UnixListener::bind_addr(&address).unwrap();
         assert!(listening(name.as_bytes()));
         drop(listener);
-        assert!(!listening(name.as_bytes()), "gone with its daemon");
+        // The tests run side by side, and some of them start programs. A
+        // child keeps what its parent had open from the moment it is made
+        // until it becomes its program, the socket dropped here included,
+        // and for that moment the name still answers. So the name is given
+        // a little while to go.
+        let gone = (0..200).any(|_| {
+            let gone = !listening(name.as_bytes());
+            if !gone {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            gone
+        });
+        assert!(gone, "gone with its daemon");
     }
 }
