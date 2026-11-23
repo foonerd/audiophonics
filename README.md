@@ -8,7 +8,7 @@ Each plugin ships a small native program written in Rust and a thin plugin aroun
 
 | Plugin | Folder | Store name | Hardware | Status |
 | --- | --- | --- | --- | --- |
-| [Evo Sabre](plugins/audiophonics_evosabre/README.md) | `audiophonics_evosabre` | `audiophonics_evo_sabre` | EVO Sabre: second OLED display, remote | 3.1.0; version 3 is a rewrite of version 2 |
+| [Evo Sabre](plugins/audiophonics_evosabre/README.md) | `audiophonics_evosabre` | `audiophonics_evo_sabre` | EVO Sabre: second OLED display, remote | 3.2.0; version 3 is a rewrite of version 2 |
 | [RaspDacMini LCD](plugins/audiophonics_raspdacminilcd/README.md) | `audiophonics_raspdacminilcd` | `raspdac_mini_lcd` | RaspDac Mini: 2.4 inch display, remote | 2.0.0, a rewrite of version 1 |
 
 A plugin has two names, and they need not be the same word. Its **folder** under `plugins/` is its folder in Volumio's plugin sources, [volumio-plugins-sources-bookworm](https://github.com/volumio/volumio-plugins-sources-bookworm); a release's tag and zip carry it. Its **store name** is the `name` in its `package.json`: what the plugin store lists it under and where a player installs it, `/data/plugins/<category>/<store name>`. A version of a plugin the store already has keeps both.

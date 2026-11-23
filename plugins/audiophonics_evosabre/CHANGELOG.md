@@ -2,6 +2,12 @@
 
 All notable changes to the Audiophonics Evo Sabre plugin are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.0] - 2026-11-23
+
+A choice of digits for the Extra large track time. Restart the player after updating.
+
+- **Track time: Extra large digits.** Segments, as before; Light, with thin strokes; or Bold, with heavier strokes and wider digits. The choice is on the settings page while *Track time* is Extra large.
+
 ## [3.1.0] - 2026-11-22
 
 A track time that can be read from across the room, the snake as a choice while the player rests, and a display that waits for the player to finish starting. Installing over 3.0.0 keeps your settings.
