@@ -717,7 +717,7 @@ impl Selector {
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::figures::{Size, SIZES};
+    use crate::figures::{Face, Size, FACES, SIZES};
     use crate::frame;
     use audiophonics_unifont::sample;
 
@@ -1327,7 +1327,9 @@ pub mod tests {
 
     #[test]
     fn the_foot_is_worked_out_by_rule_for_every_time_and_every_place() {
-        use Size::{ExtraLarge, Large, Medium, Small};
+        use Size::{Large, Medium, Small};
+        #[allow(non_snake_case)]
+        let ExtraLarge = Size::ExtraLarge(Face::Segments);
         let under = Some(Place::Under);
         let between = Some(Place::Between);
         // The time, the meters; the album's own line, the time's top and
@@ -1420,6 +1422,15 @@ pub mod tests {
                 },
                 "{time:?} {place:?}"
             );
+        }
+        // The largest has the same foot whatever its face.
+        for face in FACES {
+            for place in [None, under, between] {
+                let mut segments = foot(Some(ExtraLarge), place);
+                let other = foot(Some(Size::ExtraLarge(face)), place);
+                segments.time.as_mut().unwrap().size = Size::ExtraLarge(face);
+                assert_eq!(other, segments, "{face:?} {place:?}");
+            }
         }
         // Upright meters stand beside the foot and ask nothing of it.
         for time in SIZES.map(Some).into_iter().chain([None]) {
@@ -1656,10 +1667,13 @@ pub mod tests {
     #[test]
     fn the_largest_time_asked_for_under_lying_meters_stands_beside_them() {
         let s = metered_state();
-        assert_eq!(
-            drawn(Some(Size::ExtraLarge), Some(Place::Under), &s),
-            drawn(Some(Size::ExtraLarge), Some(Place::Between), &s)
-        );
+        for face in FACES {
+            assert_eq!(
+                drawn(Some(Size::ExtraLarge(face)), Some(Place::Under), &s),
+                drawn(Some(Size::ExtraLarge(face)), Some(Place::Between), &s),
+                "{face:?}"
+            );
+        }
         // The sizes that fit under them are not the same beside them.
         for size in [Size::Small, Size::Medium, Size::Large] {
             assert_ne!(
@@ -1692,7 +1706,7 @@ pub mod tests {
     #[test]
     fn the_larger_times_are_drawn_in_the_artists_grey_and_the_largest_in_segments() {
         assert_eq!(time_grey(Size::Small), ALBUM);
-        for size in [Size::Medium, Size::Large, Size::ExtraLarge] {
+        for size in SIZES.into_iter().filter(|&size| size != Size::Small) {
             assert_eq!(time_grey(size), ARTIST, "{size:?}");
         }
         // The segments that are not lit follow the clock's, in the largest
@@ -1707,14 +1721,15 @@ pub mod tests {
             screen.render(&mut f, &s, "10.0.0.1", Instant::now(), none, None);
             f
         };
-        let top = foot(Some(Size::ExtraLarge), None).time.unwrap().top;
+        let segments = Size::ExtraLarge(Face::Segments);
+        let top = foot(Some(segments), None).time.unwrap().top;
         // "1:03": the one has no top segment, so its ghost shows there.
-        assert_eq!(render(Size::ExtraLarge, 0, &mut none).get(3, top), 0);
+        assert_eq!(render(segments, 0, &mut none).get(3, top), 0);
         assert_eq!(
-            render(Size::ExtraLarge, grey::FAINT, &mut none).get(3, top),
+            render(segments, grey::FAINT, &mut none).get(3, top),
             grey::FAINT
         );
-        for size in [Size::Small, Size::Medium, Size::Large] {
+        for size in SIZES.into_iter().filter(|&size| size != segments) {
             assert_eq!(
                 render(size, 0, &mut none),
                 render(size, grey::FAINT, &mut none),

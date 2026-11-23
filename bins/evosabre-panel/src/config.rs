@@ -10,7 +10,7 @@
 //! named and leaves its default too: the panel comes up on a damaged store
 //! and says in the journal what was wrong with it.
 
-use crate::figures::Size;
+use crate::figures::{Face, Size};
 use crate::grey;
 use crate::layout::Place;
 use audiophonics_base::log::Level;
@@ -123,7 +123,8 @@ pub struct Config {
     /// Decibels added to what the meters show, -12 to 12.
     pub meters_gain: i8,
     /// The time played, the track's length and the bar between them: how
-    /// large their figures are, or `None` to leave all three out.
+    /// large their figures are and, at their largest, in which face; or
+    /// `None` to leave all three out.
     pub track_time: Option<Size>,
     /// Whether the snake has the screen while the player rests, in place
     /// of the clock.
@@ -271,11 +272,20 @@ pub fn from_store(store: &Store) -> (Config, Vec<String>) {
             )),
         }
     }
+    // The face of the largest time: the segments it first had, unless
+    // another is asked for. The other sizes have one face each.
+    let mut face = Face::Segments;
+    if let Some(v) = store.text("track_time_face") {
+        match Face::parse(&v) {
+            Some(asked) => face = asked,
+            None => problems.push(format!("track_time_face: not segments, light or bold: {v}")),
+        }
+    }
     // A store written before the time had sizes holds a switch and no
     // size: on is the smallest, which is the size the time then had.
     match store.text("track_time_size") {
         Some(v) => match time_size(&v) {
-            Some(size) => c.track_time = size,
+            Some(size) => c.track_time = size.map(|size| size.in_face(face)),
             None => problems.push(format!(
                 "track_time_size: not off, small, medium, large or extra_large: {v}"
             )),
@@ -378,6 +388,7 @@ mod tests {
             "meters_gain": { "type": "number", "value": -6 },
             "track_time": { "type": "boolean", "value": true },
             "track_time_size": { "type": "string", "value": "extra_large" },
+            "track_time_face": { "type": "string", "value": "light" },
             "snake": { "type": "boolean", "value": true },
             "log_level": { "type": "string", "value": "info" }
         }"#,
@@ -393,7 +404,7 @@ mod tests {
         assert_eq!(c.clock_segments, Unlit::Off);
         assert_eq!(c.meters, Some(Place::Right));
         assert_eq!(c.meters_gain, -6);
-        assert_eq!(c.track_time, Some(Size::ExtraLarge));
+        assert_eq!(c.track_time, Some(Size::ExtraLarge(Face::Light)));
         assert!(c.snake);
         assert_eq!(c.log_level, Level::Info);
         assert_eq!(c.dc_gpio, 27, "a key that is absent leaves its default");
@@ -504,7 +515,7 @@ mod tests {
             ("small", Some(Size::Small)),
             ("medium", Some(Size::Medium)),
             ("large", Some(Size::Large)),
-            ("extra_large", Some(Size::ExtraLarge)),
+            ("extra_large", Some(Size::ExtraLarge(Face::Segments))),
             ("off", None),
         ] {
             let store =
@@ -515,6 +526,38 @@ mod tests {
             time_of(r#"{ "track_time_size": { "type": "string", "value": "huge" } }"#);
         assert_eq!(size, Some(Size::Small), "a size not known leaves the first");
         assert!(problems.iter().any(|p| p.starts_with("track_time_size:")));
+    }
+
+    #[test]
+    fn the_largest_time_is_in_segments_unless_another_face_is_asked_for() {
+        let asked = |size: &str, face: &str| {
+            time_of(&format!(
+                r#"{{ "track_time_size": {{ "type": "string", "value": "{size}" }},
+                      "track_time_face": {{ "type": "string", "value": "{face}" }} }}"#
+            ))
+        };
+        for (word, face) in [
+            ("segments", Face::Segments),
+            ("light", Face::Light),
+            ("bold", Face::Bold),
+        ] {
+            assert_eq!(
+                asked("extra_large", word),
+                (Some(Size::ExtraLarge(face)), vec![]),
+                "{word}"
+            );
+            // The other sizes have one face each, whatever is stored.
+            assert_eq!(asked("large", word).0, Some(Size::Large), "{word}");
+            assert_eq!(asked("small", word).0, Some(Size::Small), "{word}");
+            assert_eq!(asked("off", word).0, None, "{word}");
+        }
+        let (size, problems) = asked("extra_large", "comic");
+        assert_eq!(
+            size,
+            Some(Size::ExtraLarge(Face::Segments)),
+            "a face not known leaves the first"
+        );
+        assert!(problems.iter().any(|p| p.starts_with("track_time_face:")));
     }
 
     #[test]

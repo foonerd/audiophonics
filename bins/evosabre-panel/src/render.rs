@@ -4,7 +4,7 @@
 //! shows.
 
 use crate::config::Config;
-use crate::figures::Size;
+use crate::figures::{Face, Size};
 use crate::frame::{self, Frame};
 use crate::greeting;
 use crate::grey;
@@ -149,7 +149,8 @@ pub fn all(dir: &Path, cfg: &Config) -> Result<Vec<PathBuf>, String> {
     // The time at each size, in each place it can have: without meters,
     // under lying meters, beside them, and beside upright ones. The
     // smallest is the screens above, but for beside lying meters; the
-    // largest does not fit under lying meters and stands beside them.
+    // largest does not fit under lying meters and stands beside them, and
+    // is drawn in each of its three faces.
     let mut over_an_hour = playing();
     over_an_hour.duration = Some(3753);
     over_an_hour.seek = Some(2_467_000);
@@ -157,7 +158,9 @@ pub fn all(dir: &Path, cfg: &Config) -> Result<Vec<PathBuf>, String> {
         (Size::Small, "small"),
         (Size::Medium, "medium"),
         (Size::Large, "large"),
-        (Size::ExtraLarge, "extra-large"),
+        (Size::ExtraLarge(Face::Segments), "extra-large"),
+        (Size::ExtraLarge(Face::Light), "extra-large-light"),
+        (Size::ExtraLarge(Face::Bold), "extra-large-bold"),
     ] {
         for (place, place_name, state) in [
             (None, "", &playing()),
@@ -167,8 +170,11 @@ pub fn all(dir: &Path, cfg: &Config) -> Result<Vec<PathBuf>, String> {
             (Some(Place::Between), "-beside-over-an-hour", &over_an_hour),
         ] {
             let shown_above = size == Size::Small && place != Some(Place::Between);
-            let stands_beside = size == Size::ExtraLarge && place == Some(Place::Under);
-            let one_long_enough = size != Size::ExtraLarge && state.duration == Some(3753);
+            let largest = matches!(size, Size::ExtraLarge(_));
+            let stands_beside = largest && place == Some(Place::Under);
+            // A track over an hour in the narrowest face and the widest.
+            let one_long_enough = state.duration == Some(3753)
+                && !matches!(size, Size::ExtraLarge(Face::Segments | Face::Bold));
             if shown_above || stands_beside || one_long_enough {
                 continue;
             }
@@ -246,7 +252,7 @@ mod tests {
             ..Config::default()
         };
         let files = all(&dir, &cfg).unwrap();
-        assert_eq!(files.len(), 33);
+        assert_eq!(files.len(), 40);
         for file in &files {
             let bytes = std::fs::read(file).unwrap();
             assert!(

@@ -4,7 +4,9 @@
 //! time has always had, six rows tall, and one drawn here, eight rows tall,
 //! which is as tall as a time can be under an album's line. The larger two
 //! take the album's rows: a face of the panel's own, ten rows tall, and
-//! seven-segment figures of thirteen, drawn as the resting clock's are.
+//! figures of thirteen rows, in one of three faces: seven segments, drawn
+//! as the resting clock's are; a light face drawn here, with strokes of one
+//! pixel; and a bold one of the panel's own, wider and wider apart.
 //!
 //! A time is placed by the top row of its figures and by its first lit
 //! column, whatever the face, and a space in it is as wide as a figure: a
@@ -12,39 +14,79 @@
 
 use crate::frame::Frame;
 use crate::segments;
-use embedded_graphics::mono_font::iso_8859_1::{FONT_5X8, FONT_7X14};
+use embedded_graphics::mono_font::iso_8859_1::{FONT_10X20, FONT_5X8, FONT_7X14};
 use embedded_graphics::mono_font::{MonoFont, MonoTextStyle};
 use embedded_graphics::pixelcolor::Gray4;
 use embedded_graphics::prelude::*;
 use embedded_graphics::text::{Baseline, Text};
 
-/// How large the time is drawn.
+/// How large the time is drawn, and at its largest in which face.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Size {
     Small,
     Medium,
     Large,
-    ExtraLarge,
+    ExtraLarge(Face),
+}
+
+/// The face of the largest figures.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Face {
+    /// Seven segments, as the clock's.
+    Segments,
+    /// Strokes of one pixel.
+    Light,
+    /// Heavier strokes, wider figures, wider apart.
+    Bold,
 }
 
 #[cfg(test)]
-pub const SIZES: [Size; 4] = [Size::Small, Size::Medium, Size::Large, Size::ExtraLarge];
+pub const FACES: [Face; 3] = [Face::Segments, Face::Light, Face::Bold];
 
-/// A face of the panel's own, and how many rows of its cell stand above
-/// the top of its figures.
+#[cfg(test)]
+pub const SIZES: [Size; 6] = [
+    Size::Small,
+    Size::Medium,
+    Size::Large,
+    Size::ExtraLarge(Face::Segments),
+    Size::ExtraLarge(Face::Light),
+    Size::ExtraLarge(Face::Bold),
+];
+
+/// A face of the panel's own, and where its figures stand in its cell: the
+/// rows above their top, the columns before their first, and the columns
+/// they are wide. What is left of the cell's width stands between two.
 struct Type {
     font: &'static MonoFont<'static>,
     above: u32,
+    before: u32,
+    wide: u32,
 }
 
 const SMALL: Type = Type {
     font: &FONT_5X8,
     above: 1,
+    before: 0,
+    wide: 4,
 };
 const LARGE: Type = Type {
     font: &FONT_7X14,
     above: 2,
+    before: 0,
+    wide: 6,
 };
+const BOLD: Type = Type {
+    font: &FONT_10X20,
+    above: 3,
+    before: 1,
+    wide: 8,
+};
+
+impl Type {
+    fn between(&self) -> u32 {
+        self.font.character_size.width - self.wide
+    }
+}
 
 /// The eight-row figures: five columns each, the colon three, a column
 /// between two.
@@ -98,18 +140,88 @@ const SEGMENT_W: u32 = 6;
 const SEGMENT_T: u32 = 2;
 const SEGMENT_GAP: u32 = 2;
 const SEGMENT_MIDDLE: u32 = 6;
-/// The top rows of the colon's two dots.
+/// The top rows of the colon's two dots, each two pixels square: the
+/// light figures have the same colon.
 const SEGMENT_COLON: [u32; 2] = [3, 8];
 
+/// The light thirteen-row figures: seven columns each, strokes of one
+/// pixel, two columns between two, and the colon of the segments.
+const LIGHT_W: u32 = 7;
+const LIGHT_GAP: u32 = 2;
+const LIGHT: [[&str; 13]; 10] = [
+    [
+        "..XXX..", ".X...X.", "X.....X", "X.....X", "X.....X", "X.....X", "X.....X", "X.....X",
+        "X.....X", "X.....X", "X.....X", ".X...X.", "..XXX..",
+    ],
+    [
+        "...X...", "..XX...", ".X.X...", "...X...", "...X...", "...X...", "...X...", "...X...",
+        "...X...", "...X...", "...X...", "...X...", ".XXXXX.",
+    ],
+    [
+        "..XXX..", ".X...X.", "X.....X", "......X", "......X", ".....X.", "....X..", "...X...",
+        "..X....", ".X.....", "X......", "X......", "XXXXXXX",
+    ],
+    [
+        "..XXX..", ".X...X.", "X.....X", "......X", "......X", ".....X.", "..XXX..", ".....X.",
+        "......X", "......X", "X.....X", ".X...X.", "..XXX..",
+    ],
+    [
+        ".....X.", "....XX.", "...X.X.", "...X.X.", "..X..X.", "..X..X.", ".X...X.", "X....X.",
+        "XXXXXXX", ".....X.", ".....X.", ".....X.", ".....X.",
+    ],
+    [
+        "XXXXXXX", "X......", "X......", "X......", "X.XXX..", "XX...X.", "......X", "......X",
+        "......X", "......X", "X.....X", ".X...X.", "..XXX..",
+    ],
+    [
+        "..XXX..", ".X...X.", "X......", "X......", "X......", "X.XXX..", "XX...X.", "X.....X",
+        "X.....X", "X.....X", "X.....X", ".X...X.", "..XXX..",
+    ],
+    [
+        "XXXXXXX", "......X", "......X", ".....X.", ".....X.", "....X..", "....X..", "...X...",
+        "...X...", "..X....", "..X....", "..X....", "..X....",
+    ],
+    [
+        "..XXX..", ".X...X.", "X.....X", "X.....X", "X.....X", ".X...X.", "..XXX..", ".X...X.",
+        "X.....X", "X.....X", "X.....X", ".X...X.", "..XXX..",
+    ],
+    [
+        "..XXX..", ".X...X.", "X.....X", "X.....X", "X.....X", "X.....X", ".X...XX", "..XXX.X",
+        "......X", "......X", "......X", ".X...X.", "..XXX..",
+    ],
+];
+
+impl Face {
+    /// The face the settings name `s`.
+    pub fn parse(s: &str) -> Option<Self> {
+        match s.trim() {
+            "segments" => Some(Self::Segments),
+            "light" => Some(Self::Light),
+            "bold" => Some(Self::Bold),
+            _ => None,
+        }
+    }
+}
+
 impl Size {
-    /// The size the settings name `s`.
+    /// The size the settings name `s`: the largest in segments, until
+    /// [`Size::in_face`] says otherwise.
     pub fn parse(s: &str) -> Option<Self> {
         match s.trim() {
             "small" => Some(Self::Small),
             "medium" => Some(Self::Medium),
             "large" => Some(Self::Large),
-            "extra_large" => Some(Self::ExtraLarge),
+            "extra_large" => Some(Self::ExtraLarge(Face::Segments)),
             _ => None,
+        }
+    }
+
+    /// This size in `face`, where it has faces to choose from: the largest
+    /// has, the others are as they are.
+    pub fn in_face(self, face: Face) -> Self {
+        match self {
+            Self::ExtraLarge(_) => Self::ExtraLarge(face),
+            other => other,
         }
     }
 
@@ -119,27 +231,39 @@ impl Size {
             Self::Small => 6,
             Self::Medium => MEDIUM_ROWS,
             Self::Large => 10,
-            Self::ExtraLarge => SEGMENT_ROWS,
+            Self::ExtraLarge(_) => SEGMENT_ROWS,
+        }
+    }
+
+    /// The face of the panel's own it is drawn in, if it is.
+    fn typed(self) -> Option<&'static Type> {
+        match self {
+            Self::Small => Some(&SMALL),
+            Self::Large => Some(&LARGE),
+            Self::ExtraLarge(Face::Bold) => Some(&BOLD),
+            _ => None,
         }
     }
 
     /// The columns between two of its characters.
     fn between(self) -> u32 {
-        match self {
-            Self::Small | Self::Medium | Self::Large => 1,
-            Self::ExtraLarge => SEGMENT_GAP,
+        match (self, self.typed()) {
+            (_, Some(face)) => face.between(),
+            (Self::ExtraLarge(Face::Light), _) => LIGHT_GAP,
+            (Self::ExtraLarge(_), _) => SEGMENT_GAP,
+            _ => 1,
         }
     }
 
     /// The columns one character is drawn in.
     fn drawn(self, c: char) -> u32 {
-        match (self, c) {
-            (Self::Small, _) => SMALL.font.character_size.width - 1,
-            (Self::Large, _) => LARGE.font.character_size.width - 1,
-            (Self::Medium, ':') => MEDIUM_COLON_W,
-            (Self::Medium, _) => MEDIUM_W,
-            (Self::ExtraLarge, ':') => SEGMENT_T,
-            (Self::ExtraLarge, _) => SEGMENT_W,
+        match (self, self.typed(), c) {
+            (_, Some(face), _) => face.wide,
+            (Self::Medium, _, ':') => MEDIUM_COLON_W,
+            (Self::Medium, _, _) => MEDIUM_W,
+            (Self::ExtraLarge(_), _, ':') => SEGMENT_T,
+            (Self::ExtraLarge(Face::Light), _, _) => LIGHT_W,
+            _ => SEGMENT_W,
         }
     }
 
@@ -152,47 +276,50 @@ impl Size {
     }
 
     /// Draw `time` from column `x`, the top of its figures on row `top`.
-    /// The segments of the largest figures that are not lit are drawn at
-    /// `unlit`, as the clock's are; the other sizes have none.
+    /// Where the figures are of segments, those that are not lit are drawn
+    /// at `unlit`, as the clock's are; no other figures have any.
     pub fn draw(self, f: &mut Frame, x: u32, top: u32, time: &str, luma: u8, unlit: u8) {
-        match self {
-            Self::Small => typed(f, &SMALL, x, top, time, luma),
-            Self::Large => typed(f, &LARGE, x, top, time, luma),
-            Self::Medium | Self::ExtraLarge => {
-                let mut cx = x;
-                for c in time.chars() {
-                    match (self, c.to_digit(10)) {
-                        (Self::Medium, Some(d)) => medium(f, cx, top, d as usize, luma),
-                        (Self::Medium, None) if c == ':' => {
-                            for row in MEDIUM_COLON {
-                                f.set(cx + 1, top + row, luma);
-                            }
-                        }
-                        (Self::ExtraLarge, Some(d)) => {
-                            seven(f, cx, top, Some(d as u8), luma, unlit)
-                        }
-                        (Self::ExtraLarge, None) if c == ':' => {
-                            for row in SEGMENT_COLON {
-                                block(f, cx, top + row, SEGMENT_T, SEGMENT_T, luma);
-                            }
-                        }
-                        // A space: a figure with nothing lit.
-                        (Self::ExtraLarge, None) => seven(f, cx, top, None, luma, unlit),
-                        _ => {}
+        if let Some(face) = self.typed() {
+            return typed(f, face, x, top, time, luma);
+        }
+        let mut cx = x;
+        for c in time.chars() {
+            match (self, c.to_digit(10)) {
+                (Self::Medium, Some(d)) => figure(f, cx, top, &MEDIUM[d as usize], luma),
+                (Self::Medium, None) if c == ':' => {
+                    for row in MEDIUM_COLON {
+                        f.set(cx + 1, top + row, luma);
                     }
-                    cx += self.drawn(c) + self.between();
                 }
+                (Self::ExtraLarge(Face::Light), Some(d)) => {
+                    figure(f, cx, top, &LIGHT[d as usize], luma)
+                }
+                (Self::ExtraLarge(Face::Segments), Some(d)) => {
+                    seven(f, cx, top, Some(d as u8), luma, unlit)
+                }
+                (Self::ExtraLarge(_), None) if c == ':' => {
+                    for row in SEGMENT_COLON {
+                        block(f, cx, top + row, SEGMENT_T, SEGMENT_T, luma);
+                    }
+                }
+                // A space: a figure of segments with none lit.
+                (Self::ExtraLarge(Face::Segments), None) => seven(f, cx, top, None, luma, unlit),
+                _ => {}
             }
+            cx += self.drawn(c) + self.between();
         }
     }
 }
 
-/// A time in one of the panel's own faces.
+/// A time in one of the panel's own faces: its first figure's first column
+/// on `x`.
 fn typed(f: &mut Frame, face: &Type, x: u32, top: u32, time: &str, luma: u8) {
-    let y = top as i32 - face.above as i32;
     Text::with_baseline(
         time,
-        Point::new(x as i32, y),
+        Point::new(
+            x as i32 - face.before as i32,
+            top as i32 - face.above as i32,
+        ),
         MonoTextStyle::new(face.font, Gray4::new(luma)),
         Baseline::Top,
     )
@@ -200,8 +327,9 @@ fn typed(f: &mut Frame, face: &Type, x: u32, top: u32, time: &str, luma: u8) {
     .ok();
 }
 
-fn medium(f: &mut Frame, x: u32, top: u32, digit: usize, luma: u8) {
-    for (row, line) in MEDIUM[digit].iter().enumerate() {
+/// One figure of those drawn here, a row of it to each line.
+fn figure(f: &mut Frame, x: u32, top: u32, rows: &[&str], luma: u8) {
+    for (row, line) in rows.iter().enumerate() {
         for (column, c) in line.bytes().enumerate() {
             if c == b'X' {
                 f.set(x + column as u32, top + row as u32, luma);
@@ -269,7 +397,9 @@ mod tests {
             (Size::Small, 6),
             (Size::Medium, 8),
             (Size::Large, 10),
-            (Size::ExtraLarge, 13),
+            (Size::ExtraLarge(Face::Segments), 13),
+            (Size::ExtraLarge(Face::Light), 13),
+            (Size::ExtraLarge(Face::Bold), 13),
         ] {
             assert_eq!(size.rows(), rows);
             let mut f = Frame::new();
@@ -316,7 +446,9 @@ mod tests {
         assert_eq!(Size::Small.width("5:12"), 19);
         assert_eq!(Size::Medium.width("5:12"), 21);
         assert_eq!(Size::Large.width("5:12"), 27);
-        assert_eq!(Size::ExtraLarge.width("5:12"), 26);
+        assert_eq!(Size::ExtraLarge(Face::Segments).width("5:12"), 26);
+        assert_eq!(Size::ExtraLarge(Face::Light).width("5:12"), 29);
+        assert_eq!(Size::ExtraLarge(Face::Bold).width("5:12"), 38);
         assert_eq!(Size::Small.width(""), 0);
     }
 
@@ -353,7 +485,7 @@ mod tests {
     #[test]
     fn the_segment_figures_light_what_the_clocks_do_and_ghost_the_rest() {
         let mut f = Frame::new();
-        Size::ExtraLarge.draw(&mut f, 0, 0, "1", 9, 2);
+        Size::ExtraLarge(Face::Segments).draw(&mut f, 0, 0, "1", 9, 2);
         // The two bars at the right are lit, two columns each.
         assert_eq!((f.get(4, 3), f.get(5, 3)), (9, 9));
         assert_eq!((f.get(4, 9), f.get(5, 9)), (9, 9));
@@ -374,7 +506,7 @@ mod tests {
         // Where a lit segment and an unlit one share pixels, they are lit:
         // a seven's top runs to its second column though its left is dark.
         let mut seven = Frame::new();
-        Size::ExtraLarge.draw(&mut seven, 0, 0, "7", 9, 2);
+        Size::ExtraLarge(Face::Segments).draw(&mut seven, 0, 0, "7", 9, 2);
         assert_eq!(
             (seven.get(0, 0), seven.get(1, 0), seven.get(1, 1)),
             (2, 9, 9)
@@ -382,14 +514,14 @@ mod tests {
         assert_eq!(seven.get(1, 2), 2, "under the top, the left is a ghost");
         // And a four is its left half, its waist and its right, top to bottom.
         let mut four = Frame::new();
-        Size::ExtraLarge.draw(&mut four, 0, 0, "4", 9, 0);
+        Size::ExtraLarge(Face::Segments).draw(&mut four, 0, 0, "4", 9, 0);
         assert_eq!((four.get(0, 0), four.get(0, 5), four.get(0, 7)), (9, 9, 0));
         assert_eq!((four.get(5, 0), four.get(5, 12), four.get(2, 6)), (9, 9, 9));
         assert_eq!((four.get(2, 0), four.get(2, 12)), (0, 0));
 
         // The middle segment is one row, and the halves either side match.
         let mut eight = Frame::new();
-        Size::ExtraLarge.draw(&mut eight, 0, 0, "8", 9, 0);
+        Size::ExtraLarge(Face::Segments).draw(&mut eight, 0, 0, "8", 9, 0);
         assert!((1..5).all(|x| eight.get(x, 6) == 9));
         assert!((2..4).all(|x| eight.get(x, 5) == 0 && eight.get(x, 7) == 0));
         for row in 0..6 {
@@ -400,12 +532,70 @@ mod tests {
 
         // A space is a figure with nothing lit: dark without a ghost.
         let mut space = Frame::new();
-        Size::ExtraLarge.draw(&mut space, 0, 0, " ", 9, 0);
+        Size::ExtraLarge(Face::Segments).draw(&mut space, 0, 0, " ", 9, 0);
         assert_eq!(space, Frame::new());
         let mut ghost = Frame::new();
-        Size::ExtraLarge.draw(&mut ghost, 0, 0, " ", 9, 2);
+        Size::ExtraLarge(Face::Segments).draw(&mut ghost, 0, 0, " ", 9, 2);
         assert_eq!(ghost.get(2, 0), 2);
         assert!((0..13).all(|y| (0..6).all(|x| ghost.get(x, y) != 9)));
+    }
+
+    #[test]
+    fn the_light_figures_are_seven_wide_with_strokes_of_one_pixel() {
+        for (d, figure) in LIGHT.iter().enumerate() {
+            assert!(figure.iter().all(|row| row.len() == 7), "{d}");
+            // A stroke thicker than one pixel would light a square of four
+            // somewhere.
+            let lit = |x: usize, y: usize| figure[y].as_bytes()[x] == b'X';
+            for y in 0..12 {
+                for x in 0..6 {
+                    assert!(
+                        !(lit(x, y) && lit(x + 1, y) && lit(x, y + 1) && lit(x + 1, y + 1)),
+                        "{d} at ({x}, {y})"
+                    );
+                }
+            }
+        }
+        // Each is told from every other.
+        for (a, one) in LIGHT.iter().enumerate() {
+            for (b, other) in LIGHT.iter().enumerate().skip(a + 1) {
+                assert_ne!(one, other, "{a} and {b}");
+            }
+        }
+        // It has the colon of the segments, and no ghosts.
+        let mut colon = Frame::new();
+        Size::ExtraLarge(Face::Light).draw(&mut colon, 0, 0, ":", 9, 2);
+        let mut same = Frame::new();
+        Size::ExtraLarge(Face::Segments).draw(&mut same, 0, 0, ":", 9, 2);
+        assert_eq!(colon, same);
+        for face in [Face::Light, Face::Bold] {
+            let mut plain = Frame::new();
+            Size::ExtraLarge(face).draw(&mut plain, 0, 0, " 1:07", 9, 0);
+            let mut ghosted = Frame::new();
+            Size::ExtraLarge(face).draw(&mut ghosted, 0, 0, " 1:07", 9, 2);
+            assert_eq!(plain, ghosted, "{face:?}");
+        }
+    }
+
+    #[test]
+    fn the_three_faces_of_the_largest_differ_in_weight_and_in_width() {
+        let lit = |face: Face| {
+            let mut f = Frame::new();
+            Size::ExtraLarge(face).draw(&mut f, 0, 0, "0123456789", 9, 0);
+            (0..13)
+                .flat_map(|y| (0..110).map(move |x| (x, y)))
+                .filter(|&(x, y)| f.get(x, y) != 0)
+                .count()
+        };
+        // The light face lights the fewest pixels, the segments the most
+        // for their width.
+        assert!(lit(Face::Light) < lit(Face::Bold));
+        assert!(lit(Face::Light) < lit(Face::Segments));
+        let width = |face: Face| Size::ExtraLarge(face).width("3:48");
+        assert_eq!(
+            (width(Face::Segments), width(Face::Light), width(Face::Bold)),
+            (26, 29, 38)
+        );
     }
 
     #[test]
@@ -413,7 +603,23 @@ mod tests {
         assert_eq!(Size::parse("small"), Some(Size::Small));
         assert_eq!(Size::parse(" medium "), Some(Size::Medium));
         assert_eq!(Size::parse("large"), Some(Size::Large));
-        assert_eq!(Size::parse("extra_large"), Some(Size::ExtraLarge));
+        assert_eq!(
+            Size::parse("extra_large"),
+            Some(Size::ExtraLarge(Face::Segments))
+        );
+        // The largest has faces to choose from; the others are as they are.
+        for face in FACES {
+            assert_eq!(
+                Size::parse("extra_large").unwrap().in_face(face),
+                Size::ExtraLarge(face)
+            );
+            assert_eq!(Size::Large.in_face(face), Size::Large);
+            assert_eq!(Size::Small.in_face(face), Size::Small);
+        }
+        assert_eq!(Face::parse("segments"), Some(Face::Segments));
+        assert_eq!(Face::parse(" light "), Some(Face::Light));
+        assert_eq!(Face::parse("bold"), Some(Face::Bold));
+        assert_eq!(Face::parse("plain"), None);
         assert_eq!(Size::parse("huge"), None);
         assert_eq!(Size::parse("off"), None);
     }
